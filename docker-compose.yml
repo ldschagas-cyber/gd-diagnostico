@@ -1,0 +1,25 @@
+services:
+  backend:
+    build: ./backend
+    container_name: gd_frete_backend
+    environment:
+      - DATABASE_URL=sqlite:////data/gd_frete.db
+      - SECRET_KEY=${SECRET_KEY:-troque-esta-chave-em-producao}
+      - BACKEND_CORS_ORIGINS=http://localhost,http://localhost:5173
+    volumes:
+      - gd_frete_data:/data
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+
+  frontend:
+    build: ./frontend
+    container_name: gd_frete_frontend
+    depends_on:
+      - backend
+    ports:
+      - "8080:80"
+    restart: unless-stopped
+
+volumes:
+  gd_frete_data:

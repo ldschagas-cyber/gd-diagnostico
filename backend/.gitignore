@@ -1,0 +1,26 @@
+# Segredos e ambiente (R-02, R-03) — NUNCA versionar
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+ENV/
+
+# Banco local
+*.db
+*.sqlite3
+
+# Logs e temporários
+*.log
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Uploads/saídas locais
+/uploads/
+/outputs/

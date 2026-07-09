@@ -1,0 +1,80 @@
+# ============================================================
+# GD Frete Diagnóstico — Ambiente de PRODUÇÃO
+# ============================================================
+# Uso:
+#   cp backend/.env.example backend/.env   # ajuste SECRET_KEY, senhas
+#   docker compose -f docker-compose.prod.yml up -d --build
+#
+# Aplicação disponível em: http://seu-servidor (porta 80/443 via Nginx)
+# ============================================================
+
+services:
+
+  # ---- Banco de Dados -------------------------------------------
+  db:
+    image: postgres:16-alpine
+    container_name: gd_frete_db
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - gd_pg_prod_data:/var/lib/postgresql/data
+    # Porta NÃO exposta externamente em produção.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - internal
+
+  # ---- Backend --------------------------------------------------
+  backend:
+    build:
+      context: ./backend
+    container_name: gd_frete_backend
+    restart: always
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file:
+      - ./backend/.env
+    environment:
+      DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      ENVIRONMENT: production
+      DEBUG: "false"
+    # Porta NÃO exposta diretamente — tráfego via frontend/nginx.
+    expose:
+      - "8000"
+    command: >
+      sh -c "
+        python -m alembic upgrade head &&
+        uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 2
+      "
+    networks:
+      - internal
+
+  # ---- Frontend (nginx) -----------------------------------------
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_API_URL: /api   # proxy reverso: /api → backend:8000/api
+    container_name: gd_frete_frontend
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"           # Nginx interno (TLS termina no Nginx externo ou aqui)
+    depends_on:
+      - backend
+    networks:
+      - internal
+
+volumes:
+  gd_pg_prod_data:
+
+networks:
+  internal:
+    driver: bridge

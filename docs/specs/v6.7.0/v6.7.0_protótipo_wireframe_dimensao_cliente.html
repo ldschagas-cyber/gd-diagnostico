@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>Wireframe — Dimensão Cliente (DLG) — v6.7.0 — GD Frete Diagnóstico</title>
+<style>
+  :root{
+    --indigo:#2D3561; --amber:#C9A84C; --blue:#0077A8; --ivory:#F5F1EB;
+    --white:#ffffff; --border:#E2DED4; --text:#2B2A28; --muted:#6E6A61;
+    --crit-bg:#FBEAE7; --crit-txt:#9C3B2A;
+    --atn-bg:#FBF2E0; --atn-txt:#8A5E12;
+    --efi-bg:#E9F2E7; --efi-txt:#3D6B33;
+    --causa-bg:#EDEAF6; --causa-txt:#3E3568;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;font-family:'IBM Plex Sans',Arial,sans-serif;background:var(--ivory);color:var(--text);}
+  .app{max-width:1180px;margin:0 auto;padding:24px 20px 60px;}
+  .topbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;}
+  .brand{display:flex;align-items:center;gap:10px;}
+  .brand .logo{width:30px;height:30px;border-radius:6px;background:var(--indigo);color:#fff;display:flex;align-items:center;justify-content:center;font-family:'IBM Plex Mono',monospace;font-size:13px;font-weight:600;}
+  .brand .name{font-size:14px;font-weight:600;color:var(--indigo);}
+  .breadcrumb{font-size:12px;color:var(--muted);}
+  h1{font-size:19px;color:var(--indigo);margin:4px 0 2px;font-weight:600;}
+  .sub{font-size:12.5px;color:var(--muted);margin:0 0 18px;}
+
+  .dims{display:flex;gap:6px;background:var(--white);border:1px solid var(--border);border-radius:8px;padding:4px;width:fit-content;margin-bottom:14px;}
+  .dim-btn{border:none;background:transparent;padding:7px 14px;font-size:13px;border-radius:6px;cursor:pointer;color:var(--muted);font-family:inherit;}
+  .dim-btn.active{background:var(--indigo);color:#fff;font-weight:600;}
+  .dim-btn:not(.active):hover{background:var(--ivory);}
+
+  .toolbar{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:14px;}
+  .filters{display:flex;gap:8px;}
+  select,.pill-select{font-family:inherit;font-size:12.5px;padding:7px 10px;border:1px solid var(--border);border-radius:6px;background:var(--white);color:var(--text);}
+  .ranking-wrap{display:flex;flex-direction:column;align-items:flex-end;gap:3px;}
+  .ranking-note{font-size:11px;color:var(--blue);display:none;}
+  .ranking-note.show{display:block;}
+
+  .card{background:var(--white);border:1px solid var(--border);border-radius:10px;overflow:hidden;}
+  table{width:100%;border-collapse:collapse;font-size:12.5px;}
+  thead th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.03em;color:var(--muted);padding:10px 10px;border-bottom:1px solid var(--border);white-space:nowrap;font-weight:600;}
+  tbody td{padding:11px 10px;border-bottom:1px solid var(--border);white-space:nowrap;}
+  tbody tr.row:hover{background:#FBFAF7;cursor:pointer;}
+  .expander{width:16px;display:inline-block;color:var(--muted);font-family:monospace;}
+  .cliente-nome{font-weight:600;color:var(--indigo);}
+  .badge{display:inline-block;font-size:11px;font-weight:600;padding:3px 8px;border-radius:20px;}
+  .badge.crit{background:var(--crit-bg);color:var(--crit-txt);}
+  .badge.atn{background:var(--atn-bg);color:var(--atn-txt);}
+  .badge.efi{background:var(--efi-bg);color:var(--efi-txt);}
+  .badge.neu{background:#F0EFEA;color:var(--muted);}
+  .chip-causa{display:inline-block;font-size:11px;font-weight:600;padding:3px 8px;border-radius:20px;background:var(--causa-bg);color:var(--causa-txt);margin-left:6px;}
+  .muted-cell{color:var(--muted);}
+  .num{font-family:'IBM Plex Mono',monospace;}
+  .impacto{font-weight:600;color:var(--indigo);}
+
+  tr.detail-row td{padding:0;border-bottom:1px solid var(--border);}
+  .detail{display:none;background:#FAF9F5;padding:18px 22px;border-top:1px dashed var(--border);}
+  .detail.open{display:block;}
+  .detail-grid{display:grid;grid-template-columns:200px 1fr;gap:20px;}
+  .pie-wrap{display:flex;flex-direction:column;align-items:center;gap:8px;}
+  .pie-legend{font-size:10.5px;color:var(--muted);width:100%;}
+  .pie-legend .item{display:flex;align-items:center;gap:6px;padding:1px 0;}
+  .dot{width:8px;height:8px;border-radius:2px;flex-shrink:0;}
+  .detail-metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:14px;}
+  .metric{background:var(--white);border:1px solid var(--border);border-radius:8px;padding:10px 12px;}
+  .metric .lbl{font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.03em;}
+  .metric .val{font-size:15px;font-weight:600;color:var(--indigo);margin-top:2px;}
+  .frag-box{background:#F3F1FA;border:1px solid #DCD7EF;border-radius:8px;padding:10px 12px;margin-bottom:12px;font-size:12.5px;}
+  .frag-box b{color:var(--causa-txt);}
+  .diag-text{background:var(--white);border-left:3px solid var(--indigo);border-radius:0 6px 6px 0;padding:10px 14px;font-size:13px;line-height:1.55;margin-bottom:10px;}
+  .diag-text .cliente-ref{font-weight:600;color:var(--indigo);}
+  .retro-note{font-size:11px;color:var(--muted);display:flex;align-items:center;gap:6px;margin-bottom:12px;}
+  .retro-note .i{width:14px;height:14px;border-radius:50%;background:var(--amber);color:#fff;font-size:10px;display:inline-flex;align-items:center;justify-content:center;font-weight:700;flex-shrink:0;}
+  .link-rec{font-size:12.5px;color:var(--blue);text-decoration:none;font-weight:600;}
+  .link-rec:hover{text-decoration:underline;}
+  .empty-efi{font-size:12.5px;color:var(--muted);font-style:italic;}
+
+  .foot-note{font-size:11px;color:var(--muted);margin-top:10px;}
+  .tag-proto{position:fixed;bottom:14px;right:14px;background:var(--indigo);color:#fff;font-size:10.5px;padding:5px 10px;border-radius:5px;font-family:'IBM Plex Mono',monospace;opacity:.85;}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <div class="topbar">
+    <div class="brand">
+      <div class="logo">GD</div>
+      <div class="name">GD Frete Diagnóstico</div>
+    </div>
+    <div class="breadcrumb">Diagnóstico Logístico → Diagnóstico Logístico Analítico (DLG)</div>
+  </div>
+
+  <h1>Diagnóstico Logístico Analítico</h1>
+  <p class="sub">/diagnostico/dlg — mesma tela e mesmas rotas já existentes · nova dimensão "Cliente" no seletor abaixo</p>
+
+  <div class="dims">
+    <button class="dim-btn">Filial</button>
+    <button class="dim-btn">Rota</button>
+    <button class="dim-btn">Transportadora</button>
+    <button class="dim-btn">Região</button>
+    <button class="dim-btn active">Cliente</button>
+  </div>
+
+  <div class="toolbar">
+    <div class="filters">
+      <select><option>Período: últimos 6 meses</option></select>
+      <select><option>Classificação: todas</option></select>
+    </div>
+    <div class="ranking-wrap">
+      <select id="rankSel" onchange="handleRank(this.value)">
+        <option value="frete">Ordenar por: Maior custo de frete</option>
+        <option value="pctfrete">Ordenar por: Maior % frete</option>
+        <option value="rskg">Ordenar por: Maior R$/Kg</option>
+        <option value="impacto">Ordenar por: Maior impacto financeiro potencial</option>
+        <option value="volume">Ordenar por: Maior volume movimentado</option>
+        <option value="adicionais">Ordenar por: Maior % de componentes adicionais</option>
+        <option value="fragmentacao">Ordenar por: Maior sinal de fragmentação</option>
+      </select>
+      <span class="ranking-note" id="rankNote">Mostrando apenas clientes com sinal de fragmentação ativo, ordenados por impacto financeiro.</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <div style="overflow-x:auto;">
+    <table>
+      <thead>
+        <tr>
+          <th></th>
+          <th>Cliente</th>
+          <th>Classificação</th>
+          <th>R$/Kg</th>
+          <th>Benchmark</th>
+          <th>% Frete</th>
+          <th>Valor Frete</th>
+          <th>Peso</th>
+          <th>Qtd. CT-es</th>
+          <th>Ticket Médio</th>
+          <th>Peso Médio</th>
+          <th>Dist. Média</th>
+          <th>Impacto Financeiro Pot.</th>
+        </tr>
+      </thead>
+      <tbody>
+
+        <tr class="row" onclick="toggle('d1')">
+          <td><span class="expander" id="e-d1">▸</span></td>
+          <td class="cliente-nome">Distribuidora XPTO Ltda</td>
+          <td><span class="badge crit">Crítico</span><span class="chip-causa">Adicionais</span></td>
+          <td class="num">4,82</td><td class="num">3,10</td><td class="num">38%</td>
+          <td class="num">R$ 52.300</td><td class="num">6.420 kg</td><td class="num">31</td>
+          <td class="num">R$ 4.180</td><td class="num">207 kg</td>
+          <td class="muted-cell">indisponível</td>
+          <td class="num impacto">R$ 18.400</td>
+        </tr>
+        <tr class="detail-row" id="d1"><td colspan="13"><div class="detail" id="detail-d1"></div></td></tr>
+
+        <tr class="row" onclick="toggle('d2')">
+          <td><span class="expander" id="e-d2">▸</span></td>
+          <td class="cliente-nome">Comércio Beta S.A.</td>
+          <td><span class="badge crit">Crítico</span><span class="chip-causa">Fragmentação</span></td>
+          <td class="num">4,55</td><td class="num">3,10</td><td class="num">31%</td>
+          <td class="num">R$ 41.000</td><td class="num">5.980 kg</td><td class="num">12</td>
+          <td class="num">R$ 3.420</td><td class="num">498 kg</td>
+          <td class="muted-cell">indisponível</td>
+          <td class="num impacto">R$ 14.900</td>
+        </tr>
+        <tr class="detail-row" id="d2"><td colspan="13"><div class="detail" id="detail-d2"></div></td></tr>
+
+        <tr class="row" onclick="toggle('d3')">
+          <td><span class="expander" id="e-d3">▸</span></td>
+          <td class="cliente-nome">Indústria Gama</td>
+          <td><span class="badge atn">Atenção</span><span class="chip-causa">Ambas</span></td>
+          <td class="num">3,60</td><td class="num">3,10</td><td class="num">22%</td>
+          <td class="num">R$ 19.800</td><td class="num">3.100 kg</td><td class="num">9</td>
+          <td class="num">R$ 2.640</td><td class="num">344 kg</td>
+          <td class="muted-cell">indisponível</td>
+          <td class="num impacto">R$ 6.100</td>
+        </tr>
+        <tr class="detail-row" id="d3"><td colspan="13"><div class="detail" id="detail-d3"></div></td></tr>
+
+        <tr class="row" onclick="toggle('d4')">
+          <td><span class="expander" id="e-d4">▸</span></td>
+          <td class="cliente-nome muted-cell">Cliente não identificado</td>
+          <td><span class="badge neu">—</span></td>
+          <td class="num">3,05</td><td class="num">3,10</td><td class="num">18%</td>
+          <td class="num">R$ 12.100</td><td class="num">2.900 kg</td><td class="num">14</td>
+          <td class="num">R$ 1.290</td><td class="num">207 kg</td>
+          <td class="muted-cell">indisponível</td>
+          <td class="muted-cell">—</td>
+        </tr>
+        <tr class="detail-row" id="d4"><td colspan="13"><div class="detail" id="detail-d4"></div></td></tr>
+
+        <tr class="row" onclick="toggle('d5')">
+          <td><span class="expander" id="e-d5">▸</span></td>
+          <td class="cliente-nome">Comércio Delta Ltda</td>
+          <td><span class="badge efi">Eficiente</span></td>
+          <td class="num">2,90</td><td class="num">3,10</td><td class="num">15%</td>
+          <td class="num">R$ 8.700</td><td class="num">2.400 kg</td><td class="num">7</td>
+          <td class="num">R$ 1.860</td><td class="num">343 kg</td>
+          <td class="muted-cell">indisponível</td>
+          <td class="muted-cell">—</td>
+        </tr>
+        <tr class="detail-row" id="d5"><td colspan="13"><div class="detail" id="detail-d5"></div></td></tr>
+
+      </tbody>
+    </table>
+    </div>
+  </div>
+
+  <p class="foot-note">Camada 1 (linha) preserva a ordem e o comportamento já usados em Filial / Rota / Transportadora / Região (CA-1). Camada 2 (painel expansível) só existe para esta dimensão — clique numa linha para abrir o diagnóstico.</p>
+
+  <div class="tag-proto">PROTÓTIPO · v6.7.0 · média fidelidade</div>
+</div>
+
+<script>
+function pieSvg(segments){
+  let total = segments.reduce((s,x)=>s+x.v,0);
+  let cx=60, cy=60, r=50, acc=-90;
+  let paths = segments.map(seg=>{
+    let angle = seg.v/total*360;
+    let x1 = cx + r*Math.cos(acc*Math.PI/180);
+    let y1 = cy + r*Math.sin(acc*Math.PI/180);
+    acc += angle;
+    let x2 = cx + r*Math.cos(acc*Math.PI/180);
+    let y2 = cy + r*Math.sin(acc*Math.PI/180);
+    let large = angle>180?1:0;
+    return `<path d="M${cx},${cy} L${x1.toFixed(2)},${y1.toFixed(2)} A${r},${r} 0 ${large} 1 ${x2.toFixed(2)},${y2.toFixed(2)} Z" fill="${seg.c}"/>`;
+  }).join('');
+  return `<svg width="120" height="120" viewBox="0 0 120 120">${paths}</svg>`;
+}
+
+const detalhes = {
+  d1: {
+    segs:[{l:'Frete principal',v:65,c:'#2D3561'},{l:'TDE',v:16,c:'#C9A84C'},{l:'TDA',v:9,c:'#D8895C'},{l:'Outros',v:10,c:'#B4B2A9'}],
+    metrics:[['Frete transp. principal','R$ 33.900'],['Adicionais (R$ / %)','R$ 18.400 · 35%'],['Componente ofensor','TDE, TDA']],
+    frag:null,
+    diag:'possui R$/kg 55% acima do benchmark, com componentes adicionais representando 35% do frete total — TDE e TDA são os principais ofensores. Impacto financeiro potencial: R$ 18.400.',
+    retro:true, rec:true
+  },
+  d2: {
+    segs:[{l:'Frete principal',v:69,c:'#2D3561'},{l:'Despacho',v:14,c:'#0077A8'},{l:'Pedágio',v:9,c:'#D8895C'},{l:'Outros',v:8,c:'#B4B2A9'}],
+    metrics:[['Frete transp. principal','R$ 28.200'],['Adicionais (R$ / %)','R$ 12.800 · 31%'],['Componente ofensor','Despacho']],
+    frag:'12 despachos no período, peso médio 60% abaixo do padrão da empresa, concentrados em janelas de até 5 dias.',
+    diag:'gerou 12 despachos no período com peso médio 60% abaixo do padrão da empresa, concentrados em janelas de até 5 dias — sinal de fragmentação operacional aumentando o custo por kg.',
+    retro:false, rec:true
+  },
+  d3: {
+    segs:[{l:'Frete principal',v:72,c:'#2D3561'},{l:'TDE',v:12,c:'#C9A84C'},{l:'Despacho',v:9,c:'#0077A8'},{l:'Outros',v:7,c:'#B4B2A9'}],
+    metrics:[['Frete transp. principal','R$ 14.300'],['Adicionais (R$ / %)','R$ 5.500 · 28%'],['Componente ofensor','TDE']],
+    frag:'9 despachos em 10 dias, peso médio abaixo da mediana da empresa.',
+    diag:'combina fragmentação de despachos (9 CT-es em 10 dias) com alta incidência de taxa de entrega (TDE) — ambos elevando o custo de frete acima do benchmark.',
+    retro:true, rec:true
+  },
+  d4: {
+    segs:[{l:'Frete principal',v:80,c:'#2D3561'},{l:'Outros',v:20,c:'#B4B2A9'}],
+    metrics:[['Frete transp. principal','R$ 9.700'],['Adicionais (R$ / %)','R$ 2.400 · 20%'],['Componente ofensor','—']],
+    frag:null,
+    diag:null,
+    retro:false, rec:false,
+    semIdent:true
+  },
+  d5: {
+    segs:[{l:'Frete principal',v:88,c:'#2D3561'},{l:'Outros',v:12,c:'#B4B2A9'}],
+    metrics:[['Frete transp. principal','R$ 7.700'],['Adicionais (R$ / %)','R$ 1.000 · 11%'],['Componente ofensor','—']],
+    frag:null,
+    diag:null,
+    retro:false, rec:false,
+    eficiente:true
+  }
+};
+
+function buildDetail(id){
+  const d = detalhes[id];
+  let legend = d.segs.map(s=>`<div class="item"><span class="dot" style="background:${s.c}"></span>${s.l} · ${s.v}%</div>`).join('');
+  let metricsHtml = d.metrics.map(m=>`<div class="metric"><div class="lbl">${m[0]}</div><div class="val">${m[1]}</div></div>`).join('');
+  let fragHtml = d.frag ? `<div class="frag-box"><b>Sinal de fragmentação operacional</b> (nível de despacho) — ${d.frag}</div>` : '';
+  let diagHtml = d.diag ? `<div class="diag-text"><span class="cliente-ref">Diagnóstico:</span> o cliente ${d.diag}</div>` : '';
+  let retroHtml = d.retro ? `<div class="retro-note"><span class="i">i</span> CT-e importados antes da granularização do parser podem ter TDE/TDA/Estadia agrupados em "Outros" — valores podem estar subestimados para esses registros.</div>` : '';
+  let recHtml = d.rec ? `<a class="link-rec" href="#">Ver recomendação completa →</a>` : '';
+  let empty = d.semIdent ? `<p class="empty-efi">Cliente sem CNPJ/nome de destinatário identificável no CT-e — agrupado sob "Cliente não identificado" (nunca omitido). Nenhum diagnóstico causal aplicável.</p>` : '';
+  let efi = d.eficiente ? `<p class="empty-efi">Este cliente está dentro do benchmark; nenhum diagnóstico causal aplicável.</p>` : '';
+
+  return `<div class="detail-grid">
+    <div class="pie-wrap">
+      ${pieSvg(d.segs)}
+      <div class="pie-legend">${legend}</div>
+    </div>
+    <div>
+      <div class="detail-metrics">${metricsHtml}</div>
+      ${fragHtml}
+      ${diagHtml}
+      ${empty}${efi}
+      ${retroHtml}
+      ${recHtml}
+    </div>
+  </div>`;
+}
+
+function toggle(id){
+  const row = document.getElementById(id);
+  const box = document.getElementById('detail-'+id);
+  const exp = document.getElementById('e-'+id);
+  const isOpen = box.classList.contains('open');
+  if(!box.innerHTML) box.innerHTML = buildDetail(id);
+  if(isOpen){
+    box.classList.remove('open');
+    exp.textContent = '▸';
+  } else {
+    box.classList.add('open');
+    exp.textContent = '▾';
+  }
+}
+
+function handleRank(v){
+  const note = document.getElementById('rankNote');
+  if(v==='fragmentacao'){ note.classList.add('show'); }
+  else { note.classList.remove('show'); }
+}
+</script>
+</body>
+</html>

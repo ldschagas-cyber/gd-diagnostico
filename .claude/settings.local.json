@@ -1,0 +1,23 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx vite *)",
+      "Bash(python -c \"import app.main\")",
+      "Bash(python -c \"import app.main; print\\('OK'\\)\")",
+      "Bash(python -m pytest tests/test_melhorias_v64.py -q)",
+      "Bash(python -m pytest tests/test_melhorias_v64.py -q -s -x)",
+      "Bash(python -m pytest tests/test_bid_smoke.py -q)",
+      "Bash(python -c ' *)",
+      "Bash(python -m pytest tests/test_v670_dimensao_cliente.py -q)",
+      "Bash(python -m pytest tests/ -q --collect-only)",
+      "Bash(python -m alembic heads)",
+      "Bash(rm -f /tmp/test_migration.db)",
+      "Bash(DATABASE_URL=\"sqlite:////tmp/test_migration.db\" python -m alembic upgrade head)",
+      "Bash(DATABASE_URL=\"sqlite:////tmp/test_migration.db\" python -m alembic downgrade -1)",
+      "Bash(DATABASE_URL=\"sqlite:///test_migration_scratch.db\" python -m alembic upgrade head)",
+      "Bash(DATABASE_URL=\"sqlite:///test_migration_scratch.db\" python -m alembic downgrade -1)",
+      "Bash(export DATABASE_URL=\"sqlite:///test_migration_scratch2.db\")",
+      "Bash(cd ../backend && find . -maxdepth 2 -iname \"scripts\" -o -iname \"*.py\" -path \"*script*\" 2>&1 | grep -v node_modules | head -20 *)"
+    ]
+  }
+}

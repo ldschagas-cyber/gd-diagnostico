@@ -1,0 +1,77 @@
+# ============================================================
+# GD Frete Diagnóstico — Ambiente de DESENVOLVIMENTO
+# ============================================================
+# Uso:
+#   cp backend/.env.example backend/.env   # ajuste as variáveis
+#   docker compose -f docker-compose.dev.yml up --build
+#
+# Backend disponível em: http://localhost:8000
+# Frontend disponível em: http://localhost:5173 (Vite dev server)
+# PostgreSQL disponível em: localhost:5432
+# ============================================================
+
+services:
+
+  # ---- Banco de Dados -------------------------------------------
+  db:
+    image: postgres:16-alpine
+    container_name: gd_frete_db_dev
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-gd_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-gd_pass}
+      POSTGRES_DB: ${POSTGRES_DB:-gd_frete}
+    ports:
+      - "5432:5432"
+    volumes:
+      - gd_pg_dev_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-gd_user}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # ---- Backend --------------------------------------------------
+  backend:
+    build:
+      context: ./backend
+      target: base
+    container_name: gd_frete_backend_dev
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file:
+      - ./backend/.env
+    environment:
+      DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER:-gd_user}:${POSTGRES_PASSWORD:-gd_pass}@db:5432/${POSTGRES_DB:-gd_frete}
+      ENVIRONMENT: development
+      DEBUG: "true"
+    volumes:
+      - ./backend:/app            # hot-reload: código montado no container
+    ports:
+      - "8000:8000"
+    command: >
+      sh -c "
+        python -m alembic upgrade head &&
+        uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+      "
+
+  # ---- Frontend (Vite dev server) -------------------------------
+  frontend:
+    image: node:20-alpine
+    container_name: gd_frete_frontend_dev
+    working_dir: /app
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    ports:
+      - "5173:5173"
+    environment:
+      VITE_API_URL: http://localhost:8000/api/v1
+    command: sh -c "npm install && npm run dev -- --host 0.0.0.0"
+    depends_on:
+      - backend
+
+volumes:
+  gd_pg_dev_data:
