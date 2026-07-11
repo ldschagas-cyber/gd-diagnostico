@@ -110,7 +110,7 @@ export default function Benchmarks() {
   if (carregando) {
     return (
       <Box>
-        <PageHeader titulo="Benchmarks" subtitulo="Referências de mercado por região" />
+        <PageHeader titulo="Benchmark % Frete (legado)" subtitulo="Referência residual de % Frete/Mercadoria por região" />
         <Box sx={{ display: "grid", placeItems: "center", py: 8 }}>
           <CircularProgress />
         </Box>
@@ -121,14 +121,18 @@ export default function Benchmarks() {
   return (
     <Box>
       <PageHeader
-        titulo="Benchmarks de mercado"
-        subtitulo="Configurações › Benchmarks — referências usadas nas comparações do módulo Benchmark Logístico"
+        titulo="Benchmark % Frete (legado)"
+        subtitulo="Configuração › cadastro remanescente do benchmark V1 — usado só para % Frete/Mercadoria"
       />
 
-      <Alert severity="info" sx={{ mb: 2.5 }}>
-        Defina os valores de referência de mercado (mínimo, médio e máximo) de custo
-        por kg e de frete sobre mercadoria, por região. Esses números alimentam as
-        telas de Benchmark e o cálculo de economia potencial.
+      <Alert severity="warning" sx={{ mb: 2.5 }}>
+        <strong>Tela residual, escopo reduzido (v6.9.0).</strong> A referência de R$/kg
+        deste cadastro não é mais consumida por nenhuma tela ou cálculo — foi
+        substituída pela <strong>Matriz Benchmark (OD)</strong> em "Inteligência de
+        Mercado". Os campos de <strong>% Frete/Mercadoria</strong> abaixo continuam
+        ativos: alimentam a faixa de referência exibida no Dashboard e nas
+        Recomendações, porque a Matriz Benchmark (OD) ainda não modela esse campo.
+        Edite apenas as colunas de %.
       </Alert>
 
       <Card>

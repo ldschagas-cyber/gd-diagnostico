@@ -68,6 +68,7 @@ const GRUPOS = [
       { rotulo: "Metas",       icone: <FlagIcon />,  rota: "/metas" },
       { rotulo: "Hubs Logísticos", icone: <HubIcon />, rota: "/configuracoes/hubs-logisticos" },
       { rotulo: "Referência de Corredor (legado)", icone: <RouteIcon />, rota: "/configuracoes/corredores", soAdmin: true },
+      { rotulo: "Benchmark % Frete (legado)", icone: <TableChartIcon />, rota: "/configuracoes/benchmark-pct", soAdmin: true },
     ],
   },
   {
@@ -259,7 +260,7 @@ export default function AppLayout() {
       <Divider sx={{ borderColor: "rgba(255,255,255,0.08)" }} />
       <Box sx={{ p: 2 }}>
         <Typography sx={{ color: "rgba(255,255,255,0.5)", fontSize: 11 }}>
-          v6.3 · GD Frete Diagnóstico
+          v6.9.1 · GD Frete Diagnóstico
         </Typography>
       </Box>
     </Box>

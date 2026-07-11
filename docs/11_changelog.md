@@ -162,6 +162,14 @@ Substitui `useState`/`useEffect` + chamada direta a `endpoints.js` por hooks de 
 
 Adiciona a dependency `bloquear_visualizador` aos 4 endpoints de escrita de `/empresas/{id}/clusters` (criar, importar Excel, atualizar, remover), que aceitavam escrita de um usuário com papel somente-leitura. Fecha o último achado de RBAC pendente da auditoria de segurança (Fase 5, `docs/18_fase5_seguranca.md`; item #11 do plano diretor, Etapa 4). Novo teste de regressão em `test_isolamento_v6_5_1.py`.
 
+## [6.9.2] — Fecha as duas pendências residuais da v6.9.0
+
+Resolve os dois pontos deixados como "decisão pendente" em [6.9.0]:
+
+**`Benchmarks.jsx` reativada** (renomeada "Benchmark % Frete (legado)"), como cadastro remanescente — não removida. Decisão: a Matriz Benchmark (OD) ainda não modela `% Frete/Mercadoria`, então o benchmark V1 legado continua sendo a única fonte desse campo específico (consumido por `DiagnosticoUseCase._referencia_mercado_pct`, usado no Dashboard e em Recomendações). Migrar esse campo para a Matriz Benchmark (OD) exigiria alteração de schema (`benchmark_mercado`) — fica registrado como possível trabalho futuro, não decidido nesta versão. Tela readicionada ao menu "Configuração" (`soAdmin`), com aviso explícito de que a coluna R$/kg do cadastro não tem mais nenhum efeito no sistema (Alert de aviso na própria tela).
+
+**Rodapé do menu atualizado** de `v6.3` (desatualizado desde antes da v6.5.1) para `v6.9.1` — fecha o achado `UX-10` (`docs/19_fase6_ux_ui.md`).
+
 ---
 
 ## Nota sobre nomenclatura de versão

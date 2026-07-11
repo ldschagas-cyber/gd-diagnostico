@@ -65,9 +65,9 @@
 
 | | |
 |---|---|
-| **Telas** | Nenhuma (`Benchmarks.jsx` existe no código mas está sem rota/menu — decisão de reativar ou remover pendente) |
-| **Endpoints** | `benchmarks.py` (2, CRUD ainda funcional, inacessível pela UI) |
-| **Entidades** | `Benchmark` — lido apenas por `DiagnosticoUseCase._referencia_mercado_pct` (campo `% Frete/Mercadoria`, que a Matriz Benchmark OD ainda não modela) |
+| **Telas** | `Benchmarks.jsx` (rotulada "Benchmark % Frete (legado)", `/configuracoes/benchmark-pct`, grupo "Configuração", `soAdmin`) — reativada na v6.9.2 como cadastro remanescente, não removida |
+| **Endpoints** | `benchmarks.py` (2) |
+| **Entidades** | `Benchmark` — coluna R$/kg sem nenhum consumidor (vestigial); coluna `% Frete/Mercadoria` lida por `DiagnosticoUseCase._referencia_mercado_pct` (Dashboard, Recomendações) — a Matriz Benchmark (OD) ainda não modela esse campo |
 | **Regras** | RN-13 a RN-16 |
 
 ### Benchmark Logístico — telas correntes (v6.9.0)
