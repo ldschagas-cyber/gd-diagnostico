@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef, useCallback } from "react";
+import { useEffect, useState, useRef } from "react";
 import {
   Box, Card, CardContent, Typography, Button, TextField, IconButton,
   Stack, Chip, LinearProgress, Avatar, Paper, Tooltip, Divider,
@@ -13,7 +13,14 @@ import ModoSimuladoBanner from "../components/ModoSimuladoBanner";
 import { VazioEstado } from "../components/Tabela";
 import { useEmpresa } from "../contexts/EmpresaContext";
 import { useFeedback } from "../components/Feedback";
-import { inteligenciaApi } from "../api/endpoints";
+import {
+  useIaStatus,
+  useIaSessoes,
+  useIaMensagens,
+  useCriarSessaoAssistente,
+  useEnviarMensagemAssistente,
+} from "../api/queries";
+import { useTelaEstado } from "../hooks/useTelaEstado";
 import { extrairErro } from "../api/client";
 import { GD } from "../theme";
 
@@ -73,53 +80,94 @@ function Mensagem({ msg }) {
 export default function AssistenteLogistico() {
   const { empresaAtivaId } = useEmpresa();
   const fb = useFeedback();
-  const [status, setStatus] = useState(null);
-  const [sessaoId, setSessaoId] = useState(null);
-  const [mensagens, setMensagens] = useState([]);
+
+  // Sessão ativa persistida entre navegações — evita criar uma sessão nova
+  // (e perder o histórico da conversa) toda vez que o usuário volta a esta tela.
+  const [tela, , patch] = useTelaEstado("assistente", { sessaoId: null });
+  const sessaoId = tela.sessaoId;
+  const setSessaoId = (id) => patch({ sessaoId: id });
+
   const [texto, setTexto] = useState("");
-  const [enviando, setEnviando] = useState(false);
-  const [iniciando, setIniciando] = useState(false);
+  // Mensagens otimistas (pergunta do usuário + eventual erro) exibidas antes
+  // da confirmação do servidor, para manter a UX de chat fluida.
+  const [pendentes, setPendentes] = useState([]);
   const fimRef = useRef(null);
 
-  const iniciarSessao = useCallback(async () => {
-    if (!empresaAtivaId) return;
-    setIniciando(true);
-    try {
-      const st = await inteligenciaApi.status();
-      setStatus(st);
-      const sessao = await inteligenciaApi.criarSessao(empresaAtivaId, "Conversa");
-      setSessaoId(sessao.id);
-      setMensagens([]);
-    } catch (e) {
-      fb.erro(extrairErro(e));
-    } finally {
-      setIniciando(false);
-    }
-  }, [empresaAtivaId, fb]);
+  const statusQ = useIaStatus();
+  const sessoesQ = useIaSessoes(empresaAtivaId);
+  const mensagensQ = useIaMensagens(sessaoId, empresaAtivaId);
+  const criarSessaoMut = useCriarSessaoAssistente(empresaAtivaId);
+  const enviarMut = useEnviarMensagemAssistente(sessaoId, empresaAtivaId);
 
-  useEffect(() => { iniciarSessao(); }, [iniciarSessao]);
+  const status = statusQ.data ?? null;
+  const mensagensServidor = mensagensQ.data ?? [];
+  const mensagens = [...mensagensServidor, ...pendentes];
+  const enviando = enviarMut.isPending;
+  const iniciando = criarSessaoMut.isPending;
+
+  useEffect(() => {
+    if (statusQ.error) fb.erro(extrairErro(statusQ.error));
+  }, [statusQ.error]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Ao trocar de sessão (nova conversa ou restauração ao voltar à tela),
+  // descarta as mensagens otimistas ainda não confirmadas.
+  useEffect(() => {
+    setPendentes([]);
+  }, [sessaoId]);
+
+  // Bootstrap: reaproveita a sessão persistida se ela ainda existir para esta
+  // empresa; caso não haja sessão persistida (ou ela não exista mais), cria
+  // uma nova — mesmo comportamento de antes, só que sem descartar a conversa
+  // a cada remontagem da tela.
+  useEffect(() => {
+    if (!empresaAtivaId || sessoesQ.isLoading) return;
+    if (sessaoId) {
+      const existe = sessoesQ.data?.some((s) => s.id === sessaoId);
+      if (existe === false) setSessaoId(null);
+      return;
+    }
+    if (criarSessaoMut.isPending) return;
+    criarSessaoMut.mutate("Conversa", {
+      onSuccess: (sessao) => setSessaoId(sessao.id),
+      onError: (e) => fb.erro(extrairErro(e)),
+    });
+  }, [empresaAtivaId, sessaoId, sessoesQ.isLoading, sessoesQ.data]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Segunda rede de segurança: se a sessão persistida falhar ao carregar
+  // mensagens (removida, ou de outra empresa), descarta e recria.
+  useEffect(() => {
+    if (sessaoId && mensagensQ.error) setSessaoId(null);
+  }, [sessaoId, mensagensQ.error]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     fimRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [mensagens, enviando]);
+  }, [mensagens.length, enviando]);
+
+  const novaConversa = () => {
+    criarSessaoMut.mutate("Conversa", {
+      onSuccess: (sessao) => setSessaoId(sessao.id),
+      onError: (e) => fb.erro(extrairErro(e)),
+    });
+  };
 
   const enviar = async (textoMsg) => {
     const conteudo = (textoMsg ?? texto).trim();
     if (!conteudo || !sessaoId || enviando) return;
     setTexto("");
-    setMensagens((prev) => [...prev, { papel: "user", conteudo, ferramentas_usadas: {} }]);
-    setEnviando(true);
+    setPendentes((prev) => [...prev, { papel: "user", conteudo, ferramentas_usadas: {} }]);
     try {
-      const resp = await inteligenciaApi.enviarMensagem(sessaoId, empresaAtivaId, conteudo);
-      setMensagens((prev) => [...prev, resp]);
+      await enviarMut.mutateAsync(conteudo);
+      // Aguarda o refetch (disparado pela invalidação da mutação) antes de
+      // limpar a mensagem otimista, evitando o "flash" de ela sumir enquanto
+      // os dados reais ainda não chegaram.
+      await mensagensQ.refetch();
+      setPendentes([]);
     } catch (e) {
       fb.erro(extrairErro(e));
-      setMensagens((prev) => [
+      setPendentes((prev) => [
         ...prev,
         { papel: "assistant", conteudo: "Desculpe, ocorreu um erro ao processar.", ferramentas_usadas: {} },
       ]);
-    } finally {
-      setEnviando(false);
     }
   };
 
@@ -139,7 +187,7 @@ export default function AssistenteLogistico() {
         subtitulo="Pergunte sobre seus dados — respostas com números reais via consultas SQL"
         icone={<PsychologyIcon sx={{ color: GD.indigo }} />}
         acoes={
-          <Button variant="outlined" startIcon={<AddIcon />} onClick={iniciarSessao} disabled={iniciando}>
+          <Button variant="outlined" startIcon={<AddIcon />} onClick={novaConversa} disabled={iniciando}>
             Nova conversa
           </Button>
         }

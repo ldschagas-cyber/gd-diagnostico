@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState } from "react";
 import {
   Box, Card, CardContent, Typography, Button, LinearProgress,
   Stack, Chip, Grid, TextField, MenuItem, Divider, List, ListItem,
@@ -13,7 +13,7 @@ import ModoSimuladoBanner from "../components/ModoSimuladoBanner";
 import { VazioEstado } from "../components/Tabela";
 import { useEmpresa } from "../contexts/EmpresaContext";
 import { useFeedback } from "../components/Feedback";
-import { inteligenciaApi } from "../api/endpoints";
+import { useIaStatus, useRagStatus, useRagDocumentos, useMutacoesRag } from "../api/queries";
 import { extrairErro } from "../api/client";
 import { GD } from "../theme";
 
@@ -33,53 +33,41 @@ const COR_TIPO = {
 export default function BaseConhecimento() {
   const { empresaAtivaId } = useEmpresa();
   const fb = useFeedback();
-  const [status, setStatus] = useState(null);
-  const [stats, setStats] = useState(null);
-  const [documentos, setDocumentos] = useState([]);
-  const [carregando, setCarregando] = useState(false);
 
-  // Busca
+  // Busca — não é armazenada em cache "por chave", pois o resultado depende
+  // do texto digitado a cada vez: é tratada como mutação.
   const [consulta, setConsulta] = useState("");
-  const [resultados, setResultados] = useState(null);
-  const [buscando, setBuscando] = useState(false);
 
   // Novo documento
   const [novoTipo, setNovoTipo] = useState("benchmark");
   const [novoTitulo, setNovoTitulo] = useState("");
   const [novoConteudo, setNovoConteudo] = useState("");
-  const [salvando, setSalvando] = useState(false);
 
-  const carregar = useCallback(async () => {
-    if (!empresaAtivaId) return;
-    setCarregando(true);
-    try {
-      const [st, stt, docs] = await Promise.all([
-        inteligenciaApi.status(),
-        inteligenciaApi.ragStatus(empresaAtivaId),
-        inteligenciaApi.ragDocumentos(empresaAtivaId),
-      ]);
-      setStatus(st);
-      setStats(stt);
-      setDocumentos(docs);
-    } catch (e) {
-      fb.erro(extrairErro(e));
-    } finally {
-      setCarregando(false);
-    }
-  }, [empresaAtivaId, fb]);
+  const statusQ = useIaStatus();
+  const statsQ = useRagStatus(empresaAtivaId);
+  const documentosQ = useRagDocumentos(empresaAtivaId);
+  const mut = useMutacoesRag(empresaAtivaId);
 
-  useEffect(() => { carregar(); }, [carregar]);
+  const status = statusQ.data ?? null;
+  const stats = statsQ.data ?? null;
+  const documentos = documentosQ.data ?? [];
+  const resultados = mut.buscar.data ?? null;
+  const carregando = statusQ.isFetching || statsQ.isFetching || documentosQ.isFetching;
+  const buscando = mut.buscar.isPending;
+  const salvando = mut.indexar.isPending;
+
+  useEffect(() => {
+    const e = statsQ.error || documentosQ.error;
+    if (e) fb.erro(extrairErro(e));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [statsQ.error, documentosQ.error]);
 
   const buscar = async () => {
     if (!consulta.trim()) return;
-    setBuscando(true);
     try {
-      const res = await inteligenciaApi.ragBuscar(empresaAtivaId, consulta, 5);
-      setResultados(res);
+      await mut.buscar.mutateAsync({ consulta, topK: 5 });
     } catch (e) {
       fb.erro(extrairErro(e));
-    } finally {
-      setBuscando(false);
     }
   };
 
@@ -88,26 +76,22 @@ export default function BaseConhecimento() {
       fb.erro("Informe título e conteúdo.");
       return;
     }
-    setSalvando(true);
     try {
-      await inteligenciaApi.ragIndexar(empresaAtivaId, {
+      await mut.indexar.mutateAsync({
         tipo_documento: novoTipo, titulo: novoTitulo, conteudo: novoConteudo,
       });
       fb.sucesso("Documento indexado.");
       setNovoTitulo(""); setNovoConteudo("");
-      carregar();
+      // Sem carregar() manual: a mutação invalida o cache e a lista recarrega.
     } catch (e) {
       fb.erro(extrairErro(e));
-    } finally {
-      setSalvando(false);
     }
   };
 
   const seedLegislacao = async () => {
     try {
-      const r = await inteligenciaApi.ragSeedLegislacao();
+      const r = await mut.seedLegislacao.mutateAsync();
       fb.sucesso(`${r.documentos_indexados} documento(s) de legislação ANTT indexado(s).`);
-      carregar();
     } catch (e) {
       fb.erro(extrairErro(e));
     }

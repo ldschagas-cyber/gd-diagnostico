@@ -1,4 +1,5 @@
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useState, useRef } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   Box,
   Button,
@@ -19,34 +20,23 @@ import PageHeader from "../components/PageHeader";
 import Tabela from "../components/Tabela";
 import ConfirmDialog from "../components/ConfirmDialog";
 import { useFeedback } from "../components/Feedback";
+import { useRegioes, useMutacoesCadastro } from "../api/queries";
+import { qk } from "../api/queryKeys";
 import { regioesApi } from "../api/endpoints";
 import { extrairErro } from "../api/client";
 
 export default function Regioes() {
   const { sucesso, erro: erroToast, info } = useFeedback();
+  const qc = useQueryClient();
   const inputCsv = useRef(null);
-  const [linhas, setLinhas] = useState([]);
-  const [carregando, setCarregando] = useState(true);
+  const { data: linhas = [], isLoading: carregando, error } = useRegioes();
+  const { criar, atualizar, remover: removerMut } = useMutacoesCadastro(regioesApi, qk.regioes());
   const [dialogo, setDialogo] = useState(false);
   const [editando, setEditando] = useState(null);
   const [form, setForm] = useState({ nome: "", descricao: "" });
-  const [salvando, setSalvando] = useState(false);
   const [confirmar, setConfirmar] = useState(null);
 
-  const carregar = useCallback(async () => {
-    setCarregando(true);
-    try {
-      setLinhas(await regioesApi.listar());
-    } catch (e) {
-      erroToast(extrairErro(e));
-    } finally {
-      setCarregando(false);
-    }
-  }, [erroToast]);
-
-  useEffect(() => {
-    carregar();
-  }, [carregar]);
+  if (error) erroToast(extrairErro(error));
 
   const abrirNovo = () => {
     setEditando(null);
@@ -59,30 +49,27 @@ export default function Regioes() {
     setDialogo(true);
   };
 
+  const salvando = criar.isPending || atualizar.isPending;
+
   const salvar = async () => {
-    setSalvando(true);
     try {
       if (editando) {
-        await regioesApi.atualizar(editando.id, form);
+        await atualizar.mutateAsync({ id: editando.id, payload: form });
         sucesso("Região atualizada.");
       } else {
-        await regioesApi.criar(form);
+        await criar.mutateAsync(form);
         sucesso("Região cadastrada.");
       }
       setDialogo(false);
-      await carregar();
     } catch (e) {
       erroToast(extrairErro(e));
-    } finally {
-      setSalvando(false);
     }
   };
 
   const remover = async () => {
     try {
-      await regioesApi.remover(confirmar.id);
+      await removerMut.mutateAsync(confirmar.id);
       sucesso("Região removida.");
-      await carregar();
     } catch (e) {
       erroToast(extrairErro(e));
     } finally {
@@ -97,7 +84,7 @@ export default function Regioes() {
     try {
       const res = await regioesApi.importarCsv(file);
       sucesso(res?.mensagem || `Importação concluída (${res?.importados ?? 0} regiões).`);
-      await carregar();
+      qc.invalidateQueries({ queryKey: qk.regioes() });
     } catch (err) {
       erroToast(extrairErro(err, "Falha ao importar o CSV."));
     } finally {

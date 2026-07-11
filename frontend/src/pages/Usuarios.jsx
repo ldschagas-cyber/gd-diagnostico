@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useState } from "react";
 import {
   Box,
   Button,
@@ -21,6 +21,8 @@ import PageHeader from "../components/PageHeader";
 import Tabela from "../components/Tabela";
 import ConfirmDialog from "../components/ConfirmDialog";
 import { useFeedback } from "../components/Feedback";
+import { useUsuarios, useMutacoesCadastro } from "../api/queries";
+import { qk } from "../api/queryKeys";
 import { usuariosApi } from "../api/endpoints";
 import { extrairErro } from "../api/client";
 import { useAuth } from "../contexts/AuthContext";
@@ -30,28 +32,14 @@ const VAZIO = { nome: "", email: "", senha: "", is_active: true, is_superuser: f
 export default function Usuarios() {
   const { sucesso, erro: erroToast } = useFeedback();
   const { usuario: usuarioLogado } = useAuth();
-  const [linhas, setLinhas] = useState([]);
-  const [carregando, setCarregando] = useState(true);
+  const { data: linhas = [], isLoading: carregando, error } = useUsuarios();
+  const { criar, atualizar, remover: removerMut } = useMutacoesCadastro(usuariosApi, qk.usuarios());
   const [dialogo, setDialogo] = useState(false);
   const [editando, setEditando] = useState(null);
   const [form, setForm] = useState(VAZIO);
-  const [salvando, setSalvando] = useState(false);
   const [confirmar, setConfirmar] = useState(null);
 
-  const carregar = useCallback(async () => {
-    setCarregando(true);
-    try {
-      setLinhas(await usuariosApi.listar());
-    } catch (e) {
-      erroToast(extrairErro(e));
-    } finally {
-      setCarregando(false);
-    }
-  }, [erroToast]);
-
-  useEffect(() => {
-    carregar();
-  }, [carregar]);
+  if (error) erroToast(extrairErro(error));
 
   const abrirNovo = () => {
     setEditando(null);
@@ -70,8 +58,9 @@ export default function Usuarios() {
     setDialogo(true);
   };
 
+  const salvando = criar.isPending || atualizar.isPending;
+
   const salvar = async () => {
-    setSalvando(true);
     try {
       if (editando) {
         const payload = {
@@ -81,26 +70,22 @@ export default function Usuarios() {
           is_superuser: form.is_superuser,
         };
         if (form.senha) payload.senha = form.senha;
-        await usuariosApi.atualizar(editando.id, payload);
+        await atualizar.mutateAsync({ id: editando.id, payload });
         sucesso("Usuário atualizado.");
       } else {
-        await usuariosApi.criar(form);
+        await criar.mutateAsync(form);
         sucesso("Usuário criado.");
       }
       setDialogo(false);
-      await carregar();
     } catch (e) {
       erroToast(extrairErro(e, "Não foi possível salvar o usuário."));
-    } finally {
-      setSalvando(false);
     }
   };
 
   const remover = async () => {
     try {
-      await usuariosApi.remover(confirmar.id);
+      await removerMut.mutateAsync(confirmar.id);
       sucesso("Usuário removido.");
-      await carregar();
     } catch (e) {
       erroToast(extrairErro(e));
     } finally {

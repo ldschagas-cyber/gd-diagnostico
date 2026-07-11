@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState } from "react";
 import {
   Box, Grid, Card, CardContent, Typography, Stack, Button, Chip,
   LinearProgress, Alert, TextField, MenuItem, Divider,
@@ -12,7 +12,7 @@ import PageHeader from "../components/PageHeader";
 import { VazioEstado } from "../components/Tabela";
 import { useEmpresa } from "../contexts/EmpresaContext";
 import { useFeedback } from "../components/Feedback";
-import { bidApi, mclApi } from "../api/endpoints";
+import { useBidLista, useMclPrevia, useMutacoesMcl } from "../api/queries";
 import { extrairErro } from "../api/client";
 import { fmtMoeda, fmtNumero } from "../utils/format";
 import { GD } from "../theme";
@@ -44,60 +44,44 @@ export default function ConcorrenciaMCL() {
   const { empresaAtivaId } = useEmpresa();
   const { sucesso, erro: erroToast } = useFeedback();
 
-  const [bids, setBids] = useState([]);
   const [bidId, setBidId] = useState("");
-  const [decisao, setDecisao] = useState(null);
-  const [carregando, setCarregando] = useState(false);
-  const [decidindo, setDecidindo] = useState(false);
+  const [decisaoManual, setDecisaoManual] = useState(null);
 
   // simulador
   const [variacao, setVariacao] = useState(-10);
   const [faturamento, setFaturamento] = useState("");
   const [simulacao, setSimulacao] = useState(null);
 
-  const carregarBids = useCallback(async () => {
-    if (!empresaAtivaId) return;
-    try {
-      const lista = await bidApi.listar(empresaAtivaId);
-      setBids(lista);
-    } catch (e) {
-      erroToast(extrairErro(e));
-    }
-  }, [empresaAtivaId, erroToast]);
+  const { data: bids = [], error: erroBids } = useBidLista(empresaAtivaId);
+  const previaQ = useMclPrevia(bidId);
+  const mut = useMutacoesMcl(bidId);
 
-  useEffect(() => { carregarBids(); }, [carregarBids]);
+  const carregando = previaQ.isFetching;
+  const decidindo = mut.decidir.isPending;
+  const decisao = decisaoManual || (previaQ.error ? null : previaQ.data);
 
-  const carregarPrevia = useCallback(async (id) => {
-    if (!id) return;
-    setCarregando(true);
-    setSimulacao(null);
-    try {
-      setDecisao(await mclApi.previa(id));
-    } catch (e) {
-      setDecisao(null);
-      erroToast(extrairErro(e));
-    } finally {
-      setCarregando(false);
-    }
-  }, [erroToast]);
+  useEffect(() => {
+    if (erroBids) erroToast(extrairErro(erroBids));
+  }, [erroBids, erroToast]);
+
+  useEffect(() => {
+    if (previaQ.error) erroToast(extrairErro(previaQ.error));
+  }, [previaQ.error, erroToast]);
 
   const onSelecionarBid = (id) => {
     setBidId(id);
-    setDecisao(null);
-    carregarPrevia(id);
+    setDecisaoManual(null);
+    setSimulacao(null);
   };
 
   const decidir = async () => {
     if (!bidId) return;
-    setDecidindo(true);
     try {
-      const r = await mclApi.decidir(bidId);
-      setDecisao(r);
+      const r = await mut.decidir.mutateAsync();
+      setDecisaoManual(r);
       sucesso(`Decisão registrada (v${r.versao}): ${r.vencedora?.nome} venceu.`);
     } catch (e) {
       erroToast(extrairErro(e));
-    } finally {
-      setDecidindo(false);
     }
   };
 
@@ -106,7 +90,7 @@ export default function ConcorrenciaMCL() {
     try {
       const payload = { variacao_preco_pct: Number(variacao) || 0 };
       if (faturamento) payload.faturamento_mensal = Number(faturamento);
-      setSimulacao(await mclApi.simular(bidId, payload));
+      setSimulacao(await mut.simular.mutateAsync(payload));
     } catch (e) {
       erroToast(extrairErro(e));
     }

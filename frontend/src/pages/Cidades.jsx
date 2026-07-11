@@ -1,4 +1,5 @@
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useState, useRef } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   Box,
   Button,
@@ -22,7 +23,9 @@ import PageHeader from "../components/PageHeader";
 import Tabela from "../components/Tabela";
 import ConfirmDialog from "../components/ConfirmDialog";
 import { useFeedback } from "../components/Feedback";
-import { cidadesApi, regioesApi } from "../api/endpoints";
+import { useCidades, useRegioes, useMutacoesCadastro } from "../api/queries";
+import { qk } from "../api/queryKeys";
+import { cidadesApi } from "../api/endpoints";
 import { extrairErro } from "../api/client";
 import { UFS, MACRO_REGIOES, rotuloMacro } from "../utils/format";
 
@@ -30,15 +33,17 @@ const VAZIO = { nome: "", uf: "", regiao_id: "", macro_regiao: "" };
 
 export default function Cidades() {
   const { sucesso, erro: erroToast } = useFeedback();
-  const [linhas, setLinhas] = useState([]);
-  const [regioes, setRegioes] = useState([]);
-  const [carregando, setCarregando] = useState(true);
+  const qc = useQueryClient();
+  const { data: linhas = [], isLoading: carregando, error } = useCidades();
+  const { data: regioes = [] } = useRegioes();
+  const { criar, atualizar, remover: removerMut } = useMutacoesCadastro(cidadesApi, qk.cidades());
   const [dialogo, setDialogo] = useState(false);
   const [editando, setEditando] = useState(null);
   const [form, setForm] = useState(VAZIO);
-  const [salvando, setSalvando] = useState(false);
   const [confirmar, setConfirmar] = useState(null);
   const fileRef = useRef(null);
+
+  if (error) erroToast(extrairErro(error));
 
   const baixarModelo = async () => {
     try {
@@ -58,28 +63,11 @@ export default function Cidades() {
         ? `${r.importadas} cidades importadas · ${r.ignoradas} ignoradas (já cadastradas ou inválidas).`
         : `${r.importadas} cidades importadas.`;
       sucesso(msg);
-      await carregar();
+      qc.invalidateQueries({ queryKey: qk.cidades() });
     } catch (ex) {
       erroToast(extrairErro(ex));
     }
   };
-
-  const carregar = useCallback(async () => {
-    setCarregando(true);
-    try {
-      const [cids, regs] = await Promise.all([cidadesApi.listar(), regioesApi.listar()]);
-      setLinhas(cids);
-      setRegioes(regs);
-    } catch (e) {
-      erroToast(extrairErro(e));
-    } finally {
-      setCarregando(false);
-    }
-  }, [erroToast]);
-
-  useEffect(() => {
-    carregar();
-  }, [carregar]);
 
   const abrirNovo = () => {
     setEditando(null);
@@ -97,8 +85,9 @@ export default function Cidades() {
     setDialogo(true);
   };
 
+  const salvando = criar.isPending || atualizar.isPending;
+
   const salvar = async () => {
-    setSalvando(true);
     try {
       const payload = {
         nome: form.nome,
@@ -107,26 +96,22 @@ export default function Cidades() {
         macro_regiao: form.macro_regiao || null,
       };
       if (editando) {
-        await cidadesApi.atualizar(editando.id, payload);
+        await atualizar.mutateAsync({ id: editando.id, payload });
         sucesso("Cidade atualizada.");
       } else {
-        await cidadesApi.criar(payload);
+        await criar.mutateAsync(payload);
         sucesso("Cidade cadastrada.");
       }
       setDialogo(false);
-      await carregar();
     } catch (e) {
       erroToast(extrairErro(e));
-    } finally {
-      setSalvando(false);
     }
   };
 
   const remover = async () => {
     try {
-      await cidadesApi.remover(confirmar.id);
+      await removerMut.mutateAsync(confirmar.id);
       sucesso("Cidade removida.");
-      await carregar();
     } catch (e) {
       erroToast(extrairErro(e));
     } finally {

@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useState } from "react";
 import { useParams } from "react-router-dom";
 import {
   Box, Card, CardContent, Grid, Typography, Stack, Button, TextField,
@@ -11,7 +11,7 @@ import SaveIcon from "@mui/icons-material/Save";
 import CalculateIcon from "@mui/icons-material/Calculate";
 import { useFeedback } from "../components/Feedback";
 import { useEmpresa } from "../contexts/EmpresaContext";
-import { bidApi } from "../api/endpoints";
+import { useBidSimulacoes, useBidEscopo, useBidTransp, useMutacoesSimulacoes } from "../api/queries";
 import { extrairErro } from "../api/client";
 import { fmtMoeda, fmtNumero } from "../utils/format";
 import { GD } from "../theme";
@@ -20,30 +20,18 @@ export default function BidSimulacao() {
   const { id } = useParams();
   const { empresaAtivaId } = useEmpresa();
   const { sucesso, erro: erroToast } = useFeedback();
-  const [simulacoes, setSimulacoes] = useState([]);
-  const [escopos, setEscopos] = useState([]);
-  const [bts, setBts] = useState([]);
-  const [carregando, setCarregando] = useState(false);
+
+  const { data: simulacoes = [], isFetching: carregandoSims } = useBidSimulacoes(id);
+  const { data: escopos = [] } = useBidEscopo(id);
+  const { data: bts = [] } = useBidTransp(id);
+  const mut = useMutacoesSimulacoes(id, empresaAtivaId);
+  const carregando = carregandoSims;
+  const calculando = mut.calcular.isPending;
+
   const [resultado, setResultado] = useState(null);
   const [nome, setNome] = useState("");
   const [descricao, setDescricao] = useState("");
   const [itens, setItens] = useState([{ bid_transportadora_id: "", valor_grupo: "", pct_alocado: 100 }]);
-  const [calculando, setCalculando] = useState(false);
-
-  const carregar = useCallback(async () => {
-    setCarregando(true);
-    try {
-      const [sims, esc, t] = await Promise.all([
-        bidApi.listarSimulacoes(id),
-        bidApi.listarEscopo(id),
-        bidApi.listarTransp(id),
-      ]);
-      setSimulacoes(sims); setEscopos(esc); setBts(t);
-    } catch (e) { erroToast(extrairErro(e)); }
-    finally { setCarregando(false); }
-  }, [id, erroToast]);
-
-  useEffect(() => { carregar(); }, [carregar]);
 
   const addItem = () => setItens([...itens, { bid_transportadora_id: "", valor_grupo: "", pct_alocado: 100 }]);
   const removeItem = (i) => setItens(itens.filter((_, j) => j !== i));
@@ -54,9 +42,8 @@ export default function BidSimulacao() {
   };
 
   const calcular = async () => {
-    setCalculando(true);
     try {
-      const r = await bidApi.calcularSimulacao(id, empresaAtivaId, {
+      const r = await mut.calcular.mutateAsync({
         nome: nome || "Simulação",
         descricao,
         itens: itens.map((x) => ({
@@ -67,13 +54,12 @@ export default function BidSimulacao() {
       });
       setResultado(r);
     } catch (e) { erroToast(extrairErro(e)); }
-    finally { setCalculando(false); }
   };
 
   const salvar = async () => {
     if (!nome.trim()) { erroToast("Informe o nome do cenário."); return; }
     try {
-      await bidApi.salvarSimulacao(id, empresaAtivaId, {
+      await mut.salvar.mutateAsync({
         nome, descricao,
         itens: itens.map((x) => ({
           bid_transportadora_id: Number(x.bid_transportadora_id),
@@ -82,7 +68,6 @@ export default function BidSimulacao() {
         })),
       });
       sucesso("Simulação salva."); setNome(""); setDescricao(""); setItens([{ bid_transportadora_id: "", valor_grupo: "", pct_alocado: 100 }]); setResultado(null);
-      await carregar();
     } catch (e) { erroToast(extrairErro(e)); }
   };
 

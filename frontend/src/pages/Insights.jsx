@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect } from "react";
 import {
   Box, Card, CardContent, Typography, Button, LinearProgress,
   Stack, Chip, Grid, IconButton, Tooltip,
@@ -15,7 +15,7 @@ import ModoSimuladoBanner from "../components/ModoSimuladoBanner";
 import { VazioEstado } from "../components/Tabela";
 import { useEmpresa } from "../contexts/EmpresaContext";
 import { useFeedback } from "../components/Feedback";
-import { inteligenciaApi } from "../api/endpoints";
+import { useIaStatus, useIaInsights, useGerarInsights, useMarcarLido } from "../api/queries";
 import { extrairErro } from "../api/client";
 import { fmtMoeda } from "../utils/format";
 import { GD } from "../theme";
@@ -35,47 +35,35 @@ const ROTULO_CATEGORIA = {
 export default function Insights() {
   const { empresaAtivaId } = useEmpresa();
   const fb = useFeedback();
-  const [status, setStatus] = useState(null);
-  const [insights, setInsights] = useState([]);
-  const [carregando, setCarregando] = useState(false);
-  const [gerando, setGerando] = useState(false);
 
-  const carregar = useCallback(async () => {
-    if (!empresaAtivaId) return;
-    setCarregando(true);
-    try {
-      const [st, lista] = await Promise.all([
-        inteligenciaApi.status(),
-        inteligenciaApi.listarInsights(empresaAtivaId),
-      ]);
-      setStatus(st);
-      setInsights(lista);
-    } catch (e) {
-      fb.erro(extrairErro(e));
-    } finally {
-      setCarregando(false);
-    }
-  }, [empresaAtivaId, fb]);
+  const statusQ = useIaStatus();
+  const insightsQ = useIaInsights(empresaAtivaId);
+  const gerarMut = useGerarInsights(empresaAtivaId);
+  const marcarLidoMut = useMarcarLido(empresaAtivaId);
 
-  useEffect(() => { carregar(); }, [carregar]);
+  const status = statusQ.data ?? null;
+  const insights = insightsQ.data ?? [];
+  const carregando = insightsQ.isFetching;
+  const gerando = gerarMut.isPending;
+
+  useEffect(() => {
+    if (insightsQ.error) fb.erro(extrairErro(insightsQ.error));
+  }, [insightsQ.error]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const gerar = async () => {
-    setGerando(true);
     try {
-      const r = await inteligenciaApi.gerarInsights(empresaAtivaId);
+      const r = await gerarMut.mutateAsync();
       fb.sucesso(`${r.total_insights} insight(s) gerado(s).`);
-      carregar();
+      // Sem carregar() manual: a mutação invalida o cache e a lista recarrega.
     } catch (e) {
       fb.erro(extrairErro(e));
-    } finally {
-      setGerando(false);
     }
   };
 
   const marcarLido = async (id) => {
     try {
-      await inteligenciaApi.marcarLido(id, empresaAtivaId);
-      setInsights((prev) => prev.map((i) => (i.id === id ? { ...i, lido: true } : i)));
+      await marcarLidoMut.mutateAsync(id);
+      // onSuccess da mutação já invalida a lista de insights.
     } catch (e) {
       fb.erro(extrairErro(e));
     }

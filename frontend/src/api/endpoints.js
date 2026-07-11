@@ -235,6 +235,15 @@ benchmarkApi.executivo = (empresaId, params = {}) =>
 benchmarkApi.corredores = (empresaId, params = {}) =>
   api.get(`/benchmark/corredores/${empresaId}`, { params }).then((r) => r.data);
 
+// v6.9 — Comparativo de Mercado, Simulador de Economia, Indicadores transversais
+// (Fonte única: Matriz Benchmark OD / benchmark_mercado)
+benchmarkApi.comparativoMercado = (empresaId, params = {}) =>
+  api.get(`/benchmark/comparativo-mercado/${empresaId}`, { params }).then((r) => r.data);
+benchmarkApi.simuladorEconomia = (empresaId, params = {}) =>
+  api.get(`/benchmark/simulador-economia/${empresaId}`, { params }).then((r) => r.data);
+benchmarkApi.indicadoresMercado = (empresaId, params = {}) =>
+  api.get(`/benchmark/indicadores-mercado/${empresaId}`, { params }).then((r) => r.data);
+
 // ------------------------- Benchmark OD: cadastros -------------------------
 // Catálogo global de hubs logísticos
 export const hubsApi = {

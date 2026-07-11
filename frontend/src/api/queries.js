@@ -22,6 +22,8 @@ import {
   hubsApi,
   importacaoApi,
   inteligenciaApi,
+  mblApi,
+  mclApi,
   mercadoApi,
   metasApi,
   recomendacoesApi,
@@ -46,6 +48,46 @@ export function useFiliais(empresaId) {
     queryFn: () => empresasApi.listarFiliais(empresaId),
     ...comEmpresa(empresaId),
   });
+}
+
+export function useEmpresa(id) {
+  return useQuery({
+    queryKey: qk.empresa(id),
+    queryFn: () => empresasApi.obter(id),
+    enabled: !!id,
+  });
+}
+
+export function useMutacoesEmpresa() {
+  const qc = useQueryClient();
+  const invalidar = () => qc.invalidateQueries({ queryKey: qk.empresas() });
+  return {
+    criar: useMutation({ mutationFn: (payload) => empresasApi.criar(payload), onSuccess: invalidar }),
+    atualizar: useMutation({
+      mutationFn: ({ id, payload }) => empresasApi.atualizar(id, payload),
+      onSuccess: invalidar,
+    }),
+    inativar: useMutation({ mutationFn: (id) => empresasApi.inativar(id), onSuccess: invalidar }),
+  };
+}
+
+export function useMutacoesFilial(empresaId) {
+  const qc = useQueryClient();
+  const invalidar = () => qc.invalidateQueries({ queryKey: qk.filiais(empresaId) });
+  return {
+    criar: useMutation({
+      mutationFn: (payload) => empresasApi.criarFilial(empresaId, payload),
+      onSuccess: invalidar,
+    }),
+    atualizar: useMutation({
+      mutationFn: ({ id, payload }) => empresasApi.atualizarFilial(id, payload),
+      onSuccess: invalidar,
+    }),
+    remover: useMutation({
+      mutationFn: (id) => empresasApi.removerFilial(id),
+      onSuccess: invalidar,
+    }),
+  };
 }
 
 /* ───────────────────────────── Cadastros ────────────────────────────────── */
@@ -158,6 +200,14 @@ export function useDlgAnalitico(empresaId, params = {}) {
   return useQuery({
     queryKey: qk.dlgAnalitico(empresaId, params),
     queryFn: () => dlgApi.analitico(empresaId, params),
+    ...comEmpresa(empresaId),
+  });
+}
+
+export function useDlgOutliers(empresaId, params = {}) {
+  return useQuery({
+    queryKey: qk.dlgOutliers(empresaId, params),
+    queryFn: () => dlgApi.outliers(empresaId, params),
     ...comEmpresa(empresaId),
   });
 }
@@ -278,12 +328,72 @@ export function useBenchmarkExecutivo(empresaId, params = {}) {
   });
 }
 
+export function useBenchmarkCorredores(empresaId, params = {}) {
+  return useQuery({
+    queryKey: qk.benchmarkCorredores(empresaId, params),
+    queryFn: () => benchmarkApi.corredores(empresaId, params),
+    ...comEmpresa(empresaId),
+  });
+}
+
+export function useBenchmarkEconomia(empresaId, params = {}) {
+  return useQuery({
+    queryKey: qk.benchmarkEconomia(empresaId, params),
+    queryFn: () => benchmarkApi.economia(empresaId, params),
+    ...comEmpresa(empresaId),
+  });
+}
+
+/* v6.9 — Comparativo de Mercado, Simulador de Economia, Indicadores transversais */
+export function useComparativoMercado(empresaId, params = {}) {
+  return useQuery({
+    queryKey: qk.benchmarkComparativoMercado(empresaId, params),
+    queryFn: () => benchmarkApi.comparativoMercado(empresaId, params),
+    ...comEmpresa(empresaId),
+  });
+}
+
+export function useSimuladorEconomia(empresaId, params = {}) {
+  return useQuery({
+    queryKey: qk.benchmarkSimuladorEconomia(empresaId, params),
+    queryFn: () => benchmarkApi.simuladorEconomia(empresaId, params),
+    ...comEmpresa(empresaId),
+  });
+}
+
+export function useIndicadoresMercado(empresaId, params = {}) {
+  return useQuery({
+    queryKey: qk.benchmarkIndicadoresMercado(empresaId, params),
+    queryFn: () => benchmarkApi.indicadoresMercado(empresaId, params),
+    ...comEmpresa(empresaId),
+  });
+}
+
 export function useClusters(empresaId) {
   return useQuery({
     queryKey: qk.clusters(empresaId),
     queryFn: () => clustersApi.listar(empresaId),
     ...comEmpresa(empresaId),
   });
+}
+
+export function useMutacoesCluster(empresaId) {
+  const qc = useQueryClient();
+  const invalidar = () => qc.invalidateQueries({ queryKey: qk.clusters(empresaId) });
+  return {
+    criar: useMutation({
+      mutationFn: (payload) => clustersApi.criar(empresaId, payload),
+      onSuccess: invalidar,
+    }),
+    remover: useMutation({
+      mutationFn: (id) => clustersApi.remover(empresaId, id),
+      onSuccess: invalidar,
+    }),
+    importarExcel: useMutation({
+      mutationFn: (file) => clustersApi.importarExcel(empresaId, file),
+      onSuccess: invalidar,
+    }),
+  };
 }
 
 export function useHubs(apenasAtivos = false) {
@@ -293,12 +403,69 @@ export function useHubs(apenasAtivos = false) {
   });
 }
 
+export function useMutacoesHub() {
+  const qc = useQueryClient();
+  const invalidar = () => qc.invalidateQueries({ queryKey: ["hubs"] });
+  return {
+    criar: useMutation({ mutationFn: (payload) => hubsApi.criar(payload), onSuccess: invalidar }),
+    atualizar: useMutation({
+      mutationFn: ({ id, payload }) => hubsApi.atualizar(id, payload),
+      onSuccess: invalidar,
+    }),
+    remover: useMutation({ mutationFn: (id) => hubsApi.remover(id), onSuccess: invalidar }),
+  };
+}
+
 export function useCorredoresRef() {
   return useQuery({ queryKey: qk.corredoresRef(), queryFn: corredoresApi.listar });
 }
 
+export function useMutacoesCorredorRef() {
+  const qc = useQueryClient();
+  const invalidar = () => qc.invalidateQueries({ queryKey: qk.corredoresRef() });
+  return {
+    salvar: useMutation({ mutationFn: (payload) => corredoresApi.salvar(payload), onSuccess: invalidar }),
+    remover: useMutation({ mutationFn: (id) => corredoresApi.remover(id), onSuccess: invalidar }),
+  };
+}
+
 export function useMercadoOD(params = {}) {
   return useQuery({ queryKey: qk.mercadoOD(params), queryFn: () => mercadoApi.listar(params) });
+}
+
+export function useMutacoesMercadoOD() {
+  const qc = useQueryClient();
+  const invalidar = () => qc.invalidateQueries({ queryKey: ["mercado-od"] });
+  return {
+    salvar: useMutation({ mutationFn: (payload) => mercadoApi.salvar(payload), onSuccess: invalidar }),
+    remover: useMutation({ mutationFn: (id) => mercadoApi.remover(id), onSuccess: invalidar }),
+  };
+}
+
+/* ───────────────────────────── MBL ──────────────────────────────────────── */
+
+export function useMblBenchmark(empresaId, params = {}) {
+  return useQuery({
+    queryKey: qk.mblBenchmark(empresaId, params),
+    queryFn: () => mblApi.benchmark(empresaId, params),
+    ...comEmpresa(empresaId),
+  });
+}
+
+export function useMblComparar(empresaId, params = {}) {
+  return useQuery({
+    queryKey: qk.mblComparar(empresaId, params),
+    queryFn: () => mblApi.comparar(empresaId, params),
+    enabled: !!empresaId && params.valor != null,
+  });
+}
+
+export function useProcessarMbl(empresaId) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params) => mblApi.processar(empresaId, params),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["mbl"] }),
+  });
 }
 
 /* ───────────────────── Concorrência Logística (BID) ──────────────────────── */
@@ -327,7 +494,172 @@ export function useBidDashboard(empresaId) {
   });
 }
 
+export function useMutacoesBid(empresaId) {
+  const qc = useQueryClient();
+  const invalidarLista = () => qc.invalidateQueries({ queryKey: qk.bidLista(empresaId) });
+  return {
+    criar: useMutation({
+      mutationFn: (payload) => bidApi.criar(empresaId, payload),
+      onSuccess: invalidarLista,
+    }),
+    atualizar: useMutation({
+      mutationFn: ({ id, payload }) => bidApi.atualizar(id, payload),
+      onSuccess: (_, { id }) => {
+        invalidarLista();
+        qc.invalidateQueries({ queryKey: qk.bid(id) });
+      },
+    }),
+    alterarStatus: useMutation({
+      mutationFn: ({ id, status }) => bidApi.alterarStatus(id, status),
+      onSuccess: (_, { id }) => {
+        invalidarLista();
+        qc.invalidateQueries({ queryKey: qk.bid(id) });
+      },
+    }),
+    deletar: useMutation({ mutationFn: (id) => bidApi.deletar(id), onSuccess: invalidarLista }),
+  };
+}
+
+export function useBidEscopo(id) {
+  return useQuery({ queryKey: qk.bidEscopo(id), queryFn: () => bidApi.listarEscopo(id), enabled: !!id });
+}
+
+export function useMutacoesEscopo(id, empresaId) {
+  const qc = useQueryClient();
+  const invalidar = () => qc.invalidateQueries({ queryKey: qk.bidEscopo(id) });
+  return {
+    gerar: useMutation({
+      mutationFn: (payload) => bidApi.gerarEscopo(id, empresaId, payload),
+      onSuccess: invalidar,
+    }),
+    remover: useMutation({
+      mutationFn: (eid) => bidApi.deletarEscopoItem(id, eid),
+      onSuccess: invalidar,
+    }),
+  };
+}
+
+export function useBidTransp(id) {
+  return useQuery({ queryKey: qk.bidTransp(id), queryFn: () => bidApi.listarTransp(id), enabled: !!id });
+}
+
+export function useMutacoesTranspBid(id, empresaId) {
+  const qc = useQueryClient();
+  const invalidar = () => qc.invalidateQueries({ queryKey: qk.bidTransp(id) });
+  return {
+    convidar: useMutation({
+      mutationFn: (payload) => bidApi.convidarTransp(id, empresaId, payload),
+      onSuccess: invalidar,
+    }),
+    atualizar: useMutation({
+      mutationFn: ({ tid, payload }) => bidApi.atualizarTransp(id, tid, payload),
+      onSuccess: invalidar,
+    }),
+    status: useMutation({
+      mutationFn: ({ tid, status }) => bidApi.statusTransp(id, tid, status),
+      onSuccess: invalidar,
+    }),
+    remover: useMutation({ mutationFn: (tid) => bidApi.removerTransp(id, tid), onSuccess: invalidar }),
+  };
+}
+
+export function useBidPropostas(id) {
+  return useQuery({ queryKey: qk.bidPropostas(id), queryFn: () => bidApi.listarPropostas(id), enabled: !!id });
+}
+
+export function useMutacoesPropostas(id, empresaId) {
+  const qc = useQueryClient();
+  const invalidar = () => qc.invalidateQueries({ queryKey: qk.bidPropostas(id) });
+  return {
+    incluir: useMutation({ mutationFn: (payload) => bidApi.incluirProposta(id, payload), onSuccess: invalidar }),
+    importar: useMutation({
+      mutationFn: (arquivo) => bidApi.importarPropostas(id, empresaId, arquivo),
+      onSuccess: invalidar,
+    }),
+    remover: useMutation({ mutationFn: (pid) => bidApi.deletarProposta(id, pid), onSuccess: invalidar }),
+  };
+}
+
+export function useBidComparativo(id, empresaId) {
+  return useQuery({
+    queryKey: qk.bidComparativo(id, empresaId),
+    queryFn: () => bidApi.comparativo(id, empresaId),
+    enabled: !!id && !!empresaId,
+  });
+}
+
+export function useBidEconomia(id, empresaId) {
+  return useQuery({
+    queryKey: qk.bidEconomia(id, empresaId),
+    queryFn: () => bidApi.economia(id, empresaId),
+    enabled: !!id && !!empresaId,
+  });
+}
+
+export function useBidScores(id, empresaId) {
+  return useQuery({
+    queryKey: qk.bidScores(id, empresaId),
+    queryFn: () => bidApi.scores(id, empresaId),
+    enabled: !!id && !!empresaId,
+  });
+}
+
+export function useBidSimulacoes(id) {
+  return useQuery({ queryKey: qk.bidSimulacoes(id), queryFn: () => bidApi.listarSimulacoes(id), enabled: !!id });
+}
+
+export function useMutacoesSimulacoes(id, empresaId) {
+  const qc = useQueryClient();
+  const invalidar = () => qc.invalidateQueries({ queryKey: qk.bidSimulacoes(id) });
+  return {
+    calcular: useMutation({ mutationFn: (payload) => bidApi.calcularSimulacao(id, empresaId, payload) }),
+    salvar: useMutation({
+      mutationFn: (payload) => bidApi.salvarSimulacao(id, empresaId, payload),
+      onSuccess: invalidar,
+    }),
+    remover: useMutation({ mutationFn: (sid) => bidApi.deletarSimulacao(id, sid), onSuccess: invalidar }),
+  };
+}
+
+export function useBidAuditoria(id) {
+  return useQuery({ queryKey: qk.bidAuditoria(id), queryFn: () => bidApi.auditoria(id), enabled: !!id });
+}
+
+/* ───────────────────────────── MCL ──────────────────────────────────────── */
+
+export function useMclPrevia(bidId) {
+  return useQuery({ queryKey: qk.mclPrevia(bidId), queryFn: () => mclApi.previa(bidId), enabled: !!bidId });
+}
+
+export function useMclHistorico(bidId) {
+  return useQuery({ queryKey: qk.mclHistorico(bidId), queryFn: () => mclApi.historico(bidId), enabled: !!bidId });
+}
+
+export function useMutacoesMcl(bidId) {
+  const qc = useQueryClient();
+  const invalidar = () => {
+    qc.invalidateQueries({ queryKey: qk.mclPrevia(bidId) });
+    qc.invalidateQueries({ queryKey: qk.mclHistorico(bidId) });
+  };
+  return {
+    decidir: useMutation({ mutationFn: () => mclApi.decidir(bidId), onSuccess: invalidar }),
+    simular: useMutation({ mutationFn: (payload) => mclApi.simular(bidId, payload) }),
+  };
+}
+
 /* ───────────────────── Inteligência Logística (IA) ───────────────────────── */
+
+export function useIaStatus() {
+  return useQuery({ queryKey: qk.iaStatus(), queryFn: inteligenciaApi.status });
+}
+
+export function useIaUso(empresaId) {
+  return useQuery({
+    queryKey: qk.iaUso(empresaId),
+    queryFn: () => inteligenciaApi.uso(empresaId),
+    ...comEmpresa(empresaId),
+  });
+}
 
 export function useIaDashboard(empresaId) {
   return useQuery({
@@ -359,4 +691,154 @@ export function useIaOportunidades(empresaId) {
     queryFn: () => inteligenciaApi.listarOportunidades(empresaId),
     ...comEmpresa(empresaId),
   });
+}
+
+export function useIaDiagnostico(empresaId) {
+  return useQuery({
+    queryKey: qk.iaDiagnostico(empresaId),
+    queryFn: () => inteligenciaApi.obterDiagnostico(empresaId),
+    ...comEmpresa(empresaId),
+  });
+}
+
+export function useIaScoreHistorico(empresaId) {
+  return useQuery({
+    queryKey: qk.iaScoreHistorico(empresaId),
+    queryFn: () => inteligenciaApi.historicoScore(empresaId),
+    ...comEmpresa(empresaId),
+  });
+}
+
+export function useIaDiagnosticoHistorico(empresaId) {
+  return useQuery({
+    queryKey: qk.iaDiagnosticoHistorico(empresaId),
+    queryFn: () => inteligenciaApi.historicoDiagnostico(empresaId),
+    ...comEmpresa(empresaId),
+  });
+}
+
+export function useIaBenchmarkSetorial(empresaId) {
+  return useQuery({
+    queryKey: qk.iaBenchmarkSetorial(empresaId),
+    queryFn: () => inteligenciaApi.benchmarkSetorial(empresaId),
+    ...comEmpresa(empresaId),
+  });
+}
+
+export function useIaSegmentos() {
+  return useQuery({ queryKey: qk.iaSegmentos(), queryFn: inteligenciaApi.listarSegmentos });
+}
+
+export function useIaSessoes(empresaId) {
+  return useQuery({
+    queryKey: qk.iaSessoes(empresaId),
+    queryFn: () => inteligenciaApi.listarSessoes(empresaId),
+    ...comEmpresa(empresaId),
+  });
+}
+
+export function useIaMensagens(sessaoId, empresaId) {
+  return useQuery({
+    queryKey: qk.iaMensagens(sessaoId, empresaId),
+    queryFn: () => inteligenciaApi.listarMensagens(sessaoId, empresaId),
+    enabled: !!sessaoId && !!empresaId,
+  });
+}
+
+export function useRagStatus(empresaId) {
+  return useQuery({
+    queryKey: qk.ragStatus(empresaId),
+    queryFn: () => inteligenciaApi.ragStatus(empresaId),
+    ...comEmpresa(empresaId),
+  });
+}
+
+export function useRagDocumentos(empresaId) {
+  return useQuery({
+    queryKey: qk.ragDocumentos(empresaId),
+    queryFn: () => inteligenciaApi.ragDocumentos(empresaId),
+    ...comEmpresa(empresaId),
+  });
+}
+
+/* Mutações da Inteligência IA — cada uma invalida só o que ela afeta. */
+export function useGerarInsights(empresaId) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => inteligenciaApi.gerarInsights(empresaId),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["ia", "insights", empresaId] }),
+  });
+}
+
+export function useMarcarLido(empresaId) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (insightId) => inteligenciaApi.marcarLido(insightId, empresaId),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["ia", "insights", empresaId] }),
+  });
+}
+
+export function useCalcularScore(empresaId) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => inteligenciaApi.calcularScore(empresaId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: qk.iaScore(empresaId) });
+      qc.invalidateQueries({ queryKey: qk.iaScoreHistorico(empresaId) });
+    },
+  });
+}
+
+export function useGerarDiagnosticoIA(empresaId) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (forcar) => inteligenciaApi.gerarDiagnostico(empresaId, forcar),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: qk.iaDiagnostico(empresaId) });
+      qc.invalidateQueries({ queryKey: qk.iaDiagnosticoHistorico(empresaId) });
+    },
+  });
+}
+
+/* Compartilhada entre Inteligência IA (Oportunidades) e Benchmark Logístico
+   (Recomendações) — mesma origem de dados (OportunidadeModel). */
+export function useDetectarOportunidades(empresaId) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => inteligenciaApi.detectarOportunidades(empresaId),
+    onSuccess: () => qc.invalidateQueries({ queryKey: qk.iaOportunidades(empresaId) }),
+  });
+}
+
+export function useCriarSessaoAssistente(empresaId) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (titulo) => inteligenciaApi.criarSessao(empresaId, titulo),
+    onSuccess: () => qc.invalidateQueries({ queryKey: qk.iaSessoes(empresaId) }),
+  });
+}
+
+export function useEnviarMensagemAssistente(sessaoId, empresaId) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (mensagem) => inteligenciaApi.enviarMensagem(sessaoId, empresaId, mensagem),
+    onSuccess: () => qc.invalidateQueries({ queryKey: qk.iaMensagens(sessaoId, empresaId) }),
+  });
+}
+
+export function useMutacoesRag(empresaId) {
+  const qc = useQueryClient();
+  return {
+    indexar: useMutation({
+      mutationFn: (payload) => inteligenciaApi.ragIndexar(empresaId, payload),
+      onSuccess: () => qc.invalidateQueries({ queryKey: qk.ragDocumentos(empresaId) }),
+    }),
+    buscar: useMutation({
+      mutationFn: ({ consulta, topK }) => inteligenciaApi.ragBuscar(empresaId, consulta, topK),
+    }),
+    seedLegislacao: useMutation({
+      mutationFn: () => inteligenciaApi.ragSeedLegislacao(),
+      onSuccess: () => qc.invalidateQueries({ queryKey: qk.ragDocumentos(empresaId) }),
+    }),
+  };
 }

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Box, Card, CardContent, Grid, TextField, Button, Stack, Alert, Typography,
@@ -7,7 +7,7 @@ import {
 import PageHeader from "../components/PageHeader";
 import { useFeedback } from "../components/Feedback";
 import { useEmpresa } from "../contexts/EmpresaContext";
-import { bidApi, regioesApi } from "../api/endpoints";
+import { useRegioes, useMutacoesBid } from "../api/queries";
 import { extrairErro } from "../api/client";
 
 const MACRO_REGIOES = ["Norte", "Nordeste", "Centro-Oeste", "Sudeste", "Sul"];
@@ -37,13 +37,11 @@ export default function BidFormulario() {
   const nav = useNavigate();
   const { sucesso, erro: erroToast } = useFeedback();
   const [form, setForm] = useState(VAZIO);
-  const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState("");
-  const [regioes, setRegioes] = useState([]);
 
-  useEffect(() => {
-    regioesApi.listar().then(setRegioes).catch(() => {});
-  }, []);
+  const { data: regioes = [] } = useRegioes();
+  const mut = useMutacoesBid(empresaAtivaId);
+  const salvando = mut.criar.isPending;
 
   const onChange = (campo) => (e) => setForm((f) => ({ ...f, [campo]: e.target.value }));
 
@@ -53,7 +51,6 @@ export default function BidFormulario() {
 
   const salvar = async () => {
     if (!form.nome.trim()) { setErro("Nome do BID é obrigatório."); return; }
-    setSalvando(true);
     setErro("");
     try {
       const payload = {
@@ -63,13 +60,11 @@ export default function BidFormulario() {
         periodo_analise_inicio: form.periodo_analise_inicio || null,
         periodo_analise_fim: form.periodo_analise_fim || null,
       };
-      const criado = await bidApi.criar(empresaAtivaId, payload);
+      const criado = await mut.criar.mutateAsync(payload);
       sucesso("BID criado com sucesso.");
       nav(`/bid/${criado.id}`);
     } catch (e) {
       setErro(extrairErro(e, "Não foi possível criar o BID."));
-    } finally {
-      setSalvando(false);
     }
   };
 

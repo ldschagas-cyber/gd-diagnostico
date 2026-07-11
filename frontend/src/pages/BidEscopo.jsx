@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useState } from "react";
 import { useParams } from "react-router-dom";
 import {
   Box, Card, CardContent, Typography, Stack, Button, MenuItem, Select,
@@ -13,6 +13,7 @@ import PageHeader from "../components/PageHeader";
 import { useFeedback } from "../components/Feedback";
 import { useEmpresa } from "../contexts/EmpresaContext";
 import { bidApi } from "../api/endpoints";
+import { useBidEscopo, useMutacoesEscopo } from "../api/queries";
 import { extrairErro } from "../api/client";
 import { fmtMoeda, fmtNumero } from "../utils/format";
 
@@ -28,40 +29,31 @@ export default function BidEscopo() {
   const { id } = useParams();
   const { empresaAtivaId } = useEmpresa();
   const { sucesso, erro: erroToast } = useFeedback();
-  const [escopos, setEscopos] = useState([]);
-  const [carregando, setCarregando] = useState(false);
+
+  const { data: escopos = [], isFetching: carregando } = useBidEscopo(id);
+  const mut = useMutacoesEscopo(id, empresaAtivaId);
+  const gerando = mut.gerar.isPending;
+
   const [gerandoTipo, setGerandoTipo] = useState("REGIAO");
-  const [gerando, setGerando] = useState(false);
   const [faixas, setFaixas] = useState([{ label: "", min: 0, max: null }]);
   const [dialogFaixa, setDialogFaixa] = useState(false);
 
-  const carregar = useCallback(async () => {
-    setCarregando(true);
-    try { setEscopos(await bidApi.listarEscopo(id)); }
-    catch (e) { erroToast(extrairErro(e)); }
-    finally { setCarregando(false); }
-  }, [id, erroToast]);
-
-  useEffect(() => { carregar(); }, [carregar]);
-
   const gerar = async () => {
-    setGerando(true);
     try {
       const payload = { tipo_agrupamento: gerandoTipo };
       if (gerandoTipo === "FAIXA_PESO") payload.faixas_peso = faixas;
-      await bidApi.gerarEscopo(id, empresaAtivaId, payload);
+      await mut.gerar.mutateAsync(payload);
       sucesso("Escopo gerado.");
       setDialogFaixa(false);
-      await carregar();
     } catch (e) { erroToast(extrairErro(e)); }
-    finally { setGerando(false); }
   };
 
   const baixarPacote = () => bidApi.baixarRelatorio(id, empresaAtivaId, "pacote_cotacao", "pdf");
 
   const deletarItem = async (eid) => {
-    await bidApi.deletarEscopoItem(id, eid);
-    setEscopos((e) => e.filter((x) => x.id !== eid));
+    try {
+      await mut.remover.mutateAsync(eid);
+    } catch (e) { erroToast(extrairErro(e)); }
   };
 
   const total_frete = escopos.reduce((a, e) => a + e.valor_frete_total, 0);

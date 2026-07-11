@@ -1,4 +1,3 @@
-import { useEffect, useState } from "react";
 import { useParams, useOutletContext, useNavigate } from "react-router-dom";
 import {
   Box, Card, CardContent, Typography, Grid, Stack, Divider, Chip,
@@ -8,7 +7,7 @@ import RouteIcon from "@mui/icons-material/Route";
 import CalendarMonthIcon from "@mui/icons-material/CalendarMonth";
 import Inventory2Icon from "@mui/icons-material/Inventory2";
 import NotesIcon from "@mui/icons-material/Notes";
-import { bidApi } from "../api/endpoints";
+import { useBidEscopo } from "../api/queries";
 import { extrairErro } from "../api/client";
 import { GD } from "../theme";
 
@@ -44,16 +43,10 @@ export default function BidVisaoGeral() {
   const nav = useNavigate();
   const ctx = useOutletContext() || {};
   const bid = ctx.bid;
-  const [escopos, setEscopos] = useState([]);
-  const [carregando, setCarregando] = useState(true);
-  const [erro, setErro] = useState("");
 
-  useEffect(() => {
-    bidApi.listarEscopo(id)
-      .then(setEscopos)
-      .catch((e) => setErro(extrairErro(e)))
-      .finally(() => setCarregando(false));
-  }, [id]);
+  // Escopo via React Query: cache + dedup; retorno à tela é instantâneo.
+  const { data: escopos = [], isFetching: carregando, error } = useBidEscopo(id);
+  const erro = error ? extrairErro(error) : "";
 
   if (!bid) return <LinearProgress />;
 

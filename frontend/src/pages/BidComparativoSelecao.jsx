@@ -1,4 +1,3 @@
-import { useEffect, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Box, Card, CardContent, Typography, Stack, Divider,
@@ -9,7 +8,7 @@ import PageHeader from "../components/PageHeader";
 import { VazioEstado } from "../components/Tabela";
 import BidStatusChip from "../components/BidStatusChip";
 import { useEmpresa } from "../contexts/EmpresaContext";
-import { bidApi } from "../api/endpoints";
+import { useBidLista } from "../api/queries";
 import { extrairErro } from "../api/client";
 
 /**
@@ -24,25 +23,9 @@ import { extrairErro } from "../api/client";
 export default function BidComparativoSelecao() {
   const { empresaAtivaId, empresaAtiva } = useEmpresa();
   const nav = useNavigate();
-  const [bids, setBids] = useState([]);
-  const [carregando, setCarregando] = useState(false);
-  const [erro, setErro] = useState("");
 
-  const carregar = useCallback(async () => {
-    if (!empresaAtivaId) return;
-    setCarregando(true);
-    setErro("");
-    try {
-      const lista = await bidApi.listar(empresaAtivaId);
-      setBids(lista);
-    } catch (e) {
-      setErro(extrairErro(e));
-    } finally {
-      setCarregando(false);
-    }
-  }, [empresaAtivaId]);
-
-  useEffect(() => { carregar(); }, [carregar]);
+  const { data: bids = [], isFetching: carregando, error } = useBidLista(empresaAtivaId);
+  const erro = error ? extrairErro(error) : "";
 
   if (!empresaAtivaId) {
     return (

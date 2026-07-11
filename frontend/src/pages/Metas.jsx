@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState } from "react";
 import {
   Box,
   Card,
@@ -20,59 +20,51 @@ import {
 import SaveIcon from "@mui/icons-material/Save";
 import PageHeader from "../components/PageHeader";
 import { useFeedback } from "../components/Feedback";
-import { metasApi } from "../api/endpoints";
+import { useMetaNacional, useMetasRegionais, useSalvarMetas } from "../api/queries";
 import { extrairErro } from "../api/client";
 import { MACRO_REGIOES, rotuloMacro } from "../utils/format";
 
 export default function Metas() {
   const { sucesso, erro: erroToast } = useFeedback();
-  const [carregando, setCarregando] = useState(true);
+  const { data: nac, isLoading: carregandoNac, error: erroNac } = useMetaNacional();
+  const { data: regs = [], isLoading: carregandoRegs, error: erroRegs } = useMetasRegionais();
+  const { nacional: salvarNacionalMut, regional: salvarRegionalMut } = useSalvarMetas();
+  const carregando = carregandoNac || carregandoRegs;
   const [nacional, setNacional] = useState({ meta_rs_kg: 0, meta_pct_frete: 0 });
   const [regionais, setRegionais] = useState({});
-  const [salvandoNac, setSalvandoNac] = useState(false);
   const [salvandoReg, setSalvandoReg] = useState(null);
 
-  const carregar = useCallback(async () => {
-    setCarregando(true);
-    try {
-      const [nac, regs] = await Promise.all([
-        metasApi.obterNacional(),
-        metasApi.listarRegionais(),
-      ]);
-      if (nac) setNacional({ meta_rs_kg: nac.meta_rs_kg, meta_pct_frete: nac.meta_pct_frete });
-      const mapa = {};
-      MACRO_REGIOES.forEach((m) => {
-        const existente = regs.find((r) => r.macro_regiao === m.valor);
-        mapa[m.valor] = {
-          meta_rs_kg: existente?.meta_rs_kg ?? 0,
-          meta_pct_frete: existente?.meta_pct_frete ?? 0,
-          prazo_medio_meta: existente?.prazo_medio_meta ?? 0,
-        };
-      });
-      setRegionais(mapa);
-    } catch (e) {
-      erroToast(extrairErro(e));
-    } finally {
-      setCarregando(false);
-    }
-  }, [erroToast]);
+  useEffect(() => {
+    if (nac) setNacional({ meta_rs_kg: nac.meta_rs_kg, meta_pct_frete: nac.meta_pct_frete });
+  }, [nac]);
 
   useEffect(() => {
-    carregar();
-  }, [carregar]);
+    const mapa = {};
+    MACRO_REGIOES.forEach((m) => {
+      const existente = regs.find((r) => r.macro_regiao === m.valor);
+      mapa[m.valor] = {
+        meta_rs_kg: existente?.meta_rs_kg ?? 0,
+        meta_pct_frete: existente?.meta_pct_frete ?? 0,
+        prazo_medio_meta: existente?.prazo_medio_meta ?? 0,
+      };
+    });
+    setRegionais(mapa);
+  }, [regs]);
+
+  if (erroNac) erroToast(extrairErro(erroNac));
+  if (erroRegs) erroToast(extrairErro(erroRegs));
+
+  const salvandoNac = salvarNacionalMut.isPending;
 
   const salvarNacional = async () => {
-    setSalvandoNac(true);
     try {
-      await metasApi.salvarNacional({
+      await salvarNacionalMut.mutateAsync({
         meta_rs_kg: Number(nacional.meta_rs_kg) || 0,
         meta_pct_frete: Number(nacional.meta_pct_frete) || 0,
       });
       sucesso("Meta nacional salva.");
     } catch (e) {
       erroToast(extrairErro(e));
-    } finally {
-      setSalvandoNac(false);
     }
   };
 
@@ -80,7 +72,7 @@ export default function Metas() {
     setSalvandoReg(macro);
     try {
       const r = regionais[macro];
-      await metasApi.salvarRegional({
+      await salvarRegionalMut.mutateAsync({
         macro_regiao: macro,
         meta_rs_kg: Number(r.meta_rs_kg) || 0,
         meta_pct_frete: Number(r.meta_pct_frete) || 0,

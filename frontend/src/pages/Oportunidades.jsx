@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect } from "react";
 import {
   Box, Card, CardContent, Typography, Button, LinearProgress,
   Stack, Chip, Grid,
@@ -15,7 +15,7 @@ import ModoSimuladoBanner from "../components/ModoSimuladoBanner";
 import { VazioEstado } from "../components/Tabela";
 import { useEmpresa } from "../contexts/EmpresaContext";
 import { useFeedback } from "../components/Feedback";
-import { inteligenciaApi } from "../api/endpoints";
+import { useIaStatus, useIaOportunidades, useDetectarOportunidades } from "../api/queries";
 import { extrairErro } from "../api/client";
 import { fmtMoeda } from "../utils/format";
 import { GD } from "../theme";
@@ -33,40 +33,27 @@ const COR_IMPACTO = { ALTO: "#C62828", MEDIO: GD.amber, BAIXO: "#2E7D32" };
 export default function Oportunidades() {
   const { empresaAtivaId } = useEmpresa();
   const fb = useFeedback();
-  const [status, setStatus] = useState(null);
-  const [oportunidades, setOportunidades] = useState([]);
-  const [carregando, setCarregando] = useState(false);
-  const [detectando, setDetectando] = useState(false);
 
-  const carregar = useCallback(async () => {
-    if (!empresaAtivaId) return;
-    setCarregando(true);
-    try {
-      const [st, lista] = await Promise.all([
-        inteligenciaApi.status(),
-        inteligenciaApi.listarOportunidades(empresaAtivaId),
-      ]);
-      setStatus(st);
-      setOportunidades(lista);
-    } catch (e) {
-      fb.erro(extrairErro(e));
-    } finally {
-      setCarregando(false);
-    }
-  }, [empresaAtivaId, fb]);
+  const statusQ = useIaStatus();
+  const oportunidadesQ = useIaOportunidades(empresaAtivaId);
+  const detectarMut = useDetectarOportunidades(empresaAtivaId);
 
-  useEffect(() => { carregar(); }, [carregar]);
+  const status = statusQ.data ?? null;
+  const oportunidades = oportunidadesQ.data ?? [];
+  const carregando = oportunidadesQ.isFetching;
+  const detectando = detectarMut.isPending;
+
+  useEffect(() => {
+    if (oportunidadesQ.error) fb.erro(extrairErro(oportunidadesQ.error));
+  }, [oportunidadesQ.error]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const detectar = async () => {
-    setDetectando(true);
     try {
-      const r = await inteligenciaApi.detectarOportunidades(empresaAtivaId);
+      const r = await detectarMut.mutateAsync();
       fb.sucesso(`${r.total} oportunidade(s) identificada(s).`);
-      carregar();
+      // Sem carregar() manual: a mutação invalida o cache e a lista recarrega.
     } catch (e) {
       fb.erro(extrairErro(e));
-    } finally {
-      setDetectando(false);
     }
   };
 

@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useState, useCallback, useMemo } from "react";
+import { Fragment, useEffect, useState, useMemo } from "react";
 import {
   Box, Grid, Card, CardContent, Typography, Stack, Button, Chip,
   LinearProgress, Alert, ToggleButton, ToggleButtonGroup, TextField,
@@ -21,7 +21,7 @@ import { VazioEstado } from "../components/Tabela";
 import { useEmpresa } from "../contexts/EmpresaContext";
 import { useFeedback } from "../components/Feedback";
 import { useTelaEstado } from "../hooks/useTelaEstado";
-import { dlgApi } from "../api/endpoints";
+import { useDlgResumo, useDlgAnalitico, useDlgOutliers, useProcessarDlg } from "../api/queries";
 import { extrairErro } from "../api/client";
 import { fmtMoeda, fmtNumero, fmtPct } from "../utils/format";
 import { GD } from "../theme";
@@ -251,22 +251,21 @@ export default function DiagnosticoDLG() {
   const { empresaAtivaId } = useEmpresa();
   const { sucesso, erro: erroToast } = useFeedback();
 
-  // Estado de tela persistente (dimensão + modo de visualização)
+  // Estado de tela persistente (dimensão + modo de visualização + período)
   const [tela, , patchTela] = useTelaEstado("dlg", {
     dimensao: "FILIAL",
     modo: "consolidado",   // abre em Consolidado por padrão
     classifFiltro: "TODAS", // filtro de classificação da análise por dimensão
+    dataInicio: "",
+    dataFim: "",
   });
-  const { dimensao, modo, classifFiltro } = tela;
+  const { dimensao, modo, classifFiltro, dataInicio, dataFim } = tela;
+  const setDataInicio = (v) => patchTela({ dataInicio: v });
+  const setDataFim = (v) => patchTela({ dataFim: v });
 
-  const [resumo, setResumo] = useState(null);
-  const [analitico, setAnalitico] = useState([]);
-  const [outliers, setOutliers] = useState([]);
   const [aba, setAba] = useState(0);
-  const [carregando, setCarregando] = useState(false);
-  const [processando, setProcessando] = useState(false);
-  const [dataInicio, setDataInicio] = useState("");
-  const [dataFim, setDataFim] = useState("");
+  const processarMut = useProcessarDlg(empresaAtivaId);
+  const processando = processarMut.isPending;
 
   // v6.7.0 — dimensão Cliente: expansão de linha (Camada 2), ranking próprio
   // e paginação server-side (CA-16 — Cliente é a dimensão de maior
@@ -278,57 +277,41 @@ export default function DiagnosticoDLG() {
 
   useEffect(() => { setPaginaCliente(1); setExpandidos(new Set()); }, [dimensao, modo, classifFiltro, dataInicio, dataFim]);
 
-  const carregar = useCallback(async () => {
-    if (!empresaAtivaId) return;
-    setCarregando(true);
-    try {
-      // O intervalo de datas filtra a visualização (KPIs, cards, tabela e outliers).
-      const periodo = {};
-      if (dataInicio) periodo.data_inicio = dataInicio;
-      if (dataFim) periodo.data_fim = dataFim;
-      const paramsAnalitico = { dimensao, modo, ...periodo };
-      if (ehCliente) {
-        // CA-16: filtro de classificação e paginação aplicados server-side
-        // para Cliente — evita baixar a listagem inteira de destinatários.
-        paramsAnalitico.page = paginaCliente;
-        paramsAnalitico.page_size = PAGE_SIZE_CLIENTE;
-        if (classifFiltro !== "TODAS") paramsAnalitico.classificacao = classifFiltro;
-      }
-      const [res, ana, out] = await Promise.all([
-        dlgApi.resumo(empresaAtivaId, periodo),
-        dlgApi.analitico(empresaAtivaId, paramsAnalitico),
-        dlgApi.outliers(empresaAtivaId, periodo),
-      ]);
-      setResumo(res && Object.keys(res).length ? res : null);
-      setAnalitico(ana);
-      setOutliers(out);
-    } catch (e) {
-      erroToast(extrairErro(e));
-    } finally {
-      setCarregando(false);
-    }
-  }, [empresaAtivaId, dimensao, modo, dataInicio, dataFim, ehCliente, paginaCliente, classifFiltro, erroToast]);
+  // O intervalo de datas filtra a visualização (KPIs, cards, tabela e outliers).
+  const periodo = {};
+  if (dataInicio) periodo.data_inicio = dataInicio;
+  if (dataFim) periodo.data_fim = dataFim;
+  const paramsAnalitico = { dimensao, modo, ...periodo };
+  if (ehCliente) {
+    // CA-16: filtro de classificação e paginação aplicados server-side
+    // para Cliente — evita baixar a listagem inteira de destinatários.
+    paramsAnalitico.page = paginaCliente;
+    paramsAnalitico.page_size = PAGE_SIZE_CLIENTE;
+    if (classifFiltro !== "TODAS") paramsAnalitico.classificacao = classifFiltro;
+  }
 
-  useEffect(() => { carregar(); }, [carregar]);
+  const { data: resumoBruto, isFetching: carregandoResumo, error: erroResumo } = useDlgResumo(empresaAtivaId, periodo);
+  const { data: analitico = [], isFetching: carregandoAnalitico, error: erroAnalitico } = useDlgAnalitico(empresaAtivaId, paramsAnalitico);
+  const { data: outliers = [], isFetching: carregandoOutliers, error: erroOutliers } = useDlgOutliers(empresaAtivaId, periodo);
+  const resumo = resumoBruto && Object.keys(resumoBruto).length ? resumoBruto : null;
+  const carregando = carregandoResumo || carregandoAnalitico || carregandoOutliers;
+  const erroCarregamento = erroResumo || erroAnalitico || erroOutliers;
+  if (erroCarregamento) erroToast(extrairErro(erroCarregamento));
 
   const processar = async () => {
     if (!empresaAtivaId) return;
-    setProcessando(true);
     try {
       const params = {};
       if (dataInicio) params.data_inicio = dataInicio;
       if (dataFim) params.data_fim = dataFim;
-      const r = await dlgApi.processar(empresaAtivaId, params);
+      const r = await processarMut.mutateAsync(params);
       if (r.status === "sem_dados") {
         erroToast("Nenhum CT-e encontrado no período para processar.");
       } else {
         sucesso(`Diagnóstico processado: ${r.analiticos} análises, ${r.outliers} outliers em ${r.periodos?.length || 0} período(s).`);
       }
-      carregar();
     } catch (e) {
       erroToast(extrairErro(e));
-    } finally {
-      setProcessando(false);
     }
   };
 

@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useState } from "react";
 import { useParams } from "react-router-dom";
 import {
   Box, Card, CardContent, Typography, Table, TableHead, TableRow, TableCell,
@@ -6,7 +6,7 @@ import {
 } from "@mui/material";
 import EmojiEventsIcon from "@mui/icons-material/EmojiEvents";
 import { useEmpresa } from "../contexts/EmpresaContext";
-import { bidApi } from "../api/endpoints";
+import { useBidComparativo, useBidScores } from "../api/queries";
 import { extrairErro } from "../api/client";
 import { fmtNumero, fmtMoeda } from "../utils/format";
 import { corDesvio, fmtDesvio } from "../utils/benchmark";
@@ -22,27 +22,15 @@ const FAIXA_MERCADO = {
 export default function BidComparativo() {
   const { id } = useParams();
   const { empresaAtivaId } = useEmpresa();
-  const [comparativo, setComparativo] = useState([]);
-  const [scores, setScores] = useState([]);
-  const [carregando, setCarregando] = useState(false);
-  const [erro, setErro] = useState("");
   const [aba, setAba] = useState(0);
 
-  const carregar = useCallback(async () => {
-    if (!empresaAtivaId) return;
-    setCarregando(true);
-    setErro("");
-    try {
-      const [c, s] = await Promise.all([
-        bidApi.comparativo(id, empresaAtivaId),
-        bidApi.scores(id, empresaAtivaId),
-      ]);
-      setComparativo(c); setScores(s);
-    } catch (e) { setErro(extrairErro(e)); }
-    finally { setCarregando(false); }
-  }, [id, empresaAtivaId]);
+  const { data: comparativo = [], isFetching: carregandoComp, error: erroComp } =
+    useBidComparativo(id, empresaAtivaId);
+  const { data: scores = [], isFetching: carregandoScores, error: erroScores } =
+    useBidScores(id, empresaAtivaId);
 
-  useEffect(() => { carregar(); }, [carregar]);
+  const carregando = carregandoComp || carregandoScores;
+  const erro = erroComp || erroScores;
 
   return (
     <Box>
@@ -52,7 +40,7 @@ export default function BidComparativo() {
       </Tabs>
 
       {carregando && <LinearProgress sx={{ mb: 1 }} />}
-      {erro && <Alert severity="error">{erro}</Alert>}
+      {erro && <Alert severity="error">{extrairErro(erro)}</Alert>}
 
       {aba === 0 && (
         <Card>

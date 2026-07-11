@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Box, Grid, Card, CardContent, Typography, Stack, Button,
@@ -14,7 +14,8 @@ import PageHeader from "../components/PageHeader";
 import ModoSimuladoBanner from "../components/ModoSimuladoBanner";
 import { VazioEstado } from "../components/Tabela";
 import { useEmpresa } from "../contexts/EmpresaContext";
-import { inteligenciaApi } from "../api/endpoints";
+import { useFeedback } from "../components/Feedback";
+import { useIaStatus, useIaDashboard } from "../api/queries";
 import { extrairErro } from "../api/client";
 import { fmtMoeda } from "../utils/format";
 import { GD } from "../theme";
@@ -55,30 +56,24 @@ function KPICard({ titulo, valor, subtitulo, icone, color }) {
 export default function InteligenciaDashboard() {
   const { empresaAtivaId } = useEmpresa();
   const nav = useNavigate();
-  const [status, setStatus] = useState(null);
-  const [dash, setDash] = useState(null);
-  const [carregando, setCarregando] = useState(false);
-  const [erro, setErro] = useState("");
+  const fb = useFeedback();
 
-  const carregar = useCallback(async () => {
-    if (!empresaAtivaId) return;
-    setCarregando(true);
-    setErro("");
-    try {
-      const [st, d] = await Promise.all([
-        inteligenciaApi.status(),
-        inteligenciaApi.dashboard(empresaAtivaId),
-      ]);
-      setStatus(st);
-      setDash(d);
-    } catch (e) {
-      setErro(extrairErro(e));
-    } finally {
-      setCarregando(false);
-    }
-  }, [empresaAtivaId]);
+  const statusQ = useIaStatus();
+  const dashQ = useIaDashboard(empresaAtivaId);
 
-  useEffect(() => { carregar(); }, [carregar]);
+  const status = statusQ.data ?? null;
+  const dash = dashQ.data ?? null;
+  const carregando = statusQ.isFetching || dashQ.isFetching;
+  const erro = dashQ.error ? extrairErro(dashQ.error) : "";
+
+  useEffect(() => {
+    if (statusQ.error) fb.erro(extrairErro(statusQ.error));
+  }, [statusQ.error]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const carregar = () => {
+    statusQ.refetch();
+    dashQ.refetch();
+  };
 
   if (!empresaAtivaId) {
     return (

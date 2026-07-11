@@ -1,4 +1,3 @@
-import { useEffect, useState, useCallback } from "react";
 import { useParams, useNavigate, useLocation, Outlet } from "react-router-dom";
 import {
   Box, Tabs, Tab, Typography, Stack, Button, Alert, LinearProgress,
@@ -7,7 +6,8 @@ import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import PageHeader from "../components/PageHeader";
 import BidStatusChip from "../components/BidStatusChip";
 import { useFeedback } from "../components/Feedback";
-import { bidApi } from "../api/endpoints";
+import { useEmpresa } from "../contexts/EmpresaContext";
+import { useBid, useMutacoesBid } from "../api/queries";
 import { extrairErro } from "../api/client";
 
 // rota "" = índice (Visão Geral / escopo da concorrência)
@@ -38,22 +38,18 @@ export default function BidDetalhe() {
   const { id } = useParams();
   const nav = useNavigate();
   const loc = useLocation();
+  const { empresaAtivaId } = useEmpresa();
   const { sucesso, erro: erroToast } = useFeedback();
-  const [bid, setBid] = useState(null);
-  const [carregando, setCarregando] = useState(true);
 
-  const carregar = useCallback(() => {
-    return bidApi.obter(id).then(setBid).catch(() => {}).finally(() => setCarregando(false));
-  }, [id]);
-
-  useEffect(() => { carregar(); }, [carregar]);
+  // BID via React Query: cache + dedup; retorno à tela é instantâneo.
+  const { data: bid, isLoading: carregando } = useBid(id);
+  const mut = useMutacoesBid(empresaAtivaId);
 
   const avancarStatus = async () => {
     const proximo = PROXIMOS[bid.status];
     if (!proximo) return;
     try {
-      const atualizado = await bidApi.alterarStatus(id, proximo);
-      setBid(atualizado);
+      const atualizado = await mut.alterarStatus.mutateAsync({ id, status: proximo });
       sucesso(`BID → ${atualizado.status}`);
     } catch (e) {
       erroToast(extrairErro(e));
@@ -79,7 +75,7 @@ export default function BidDetalhe() {
           <Stack direction="row" spacing={1.5} alignItems="center">
             <BidStatusChip status={bid.status} size="medium" />
             {proximo && (
-              <Button variant="contained" size="small" onClick={avancarStatus}>
+              <Button variant="contained" size="small" onClick={avancarStatus} disabled={mut.alterarStatus.isPending}>
                 {LABELS[proximo]}
               </Button>
             )}
@@ -105,7 +101,7 @@ export default function BidDetalhe() {
         {TABS.map((t) => <Tab key={t.rota || "index"} label={t.label} />)}
       </Tabs>
 
-      <Outlet context={{ bid, recarregarBid: carregar }} />
+      <Outlet context={{ bid }} />
     </Box>
   );
 }

@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect } from "react";
 import {
   Box, Grid, Card, CardContent, Typography, Stack, Button,
   LinearProgress, Chip, Divider,
@@ -14,7 +14,13 @@ import ModoSimuladoBanner from "../components/ModoSimuladoBanner";
 import { VazioEstado } from "../components/Tabela";
 import { useEmpresa } from "../contexts/EmpresaContext";
 import { useFeedback } from "../components/Feedback";
-import { inteligenciaApi } from "../api/endpoints";
+import {
+  useIaStatus,
+  useIaScore,
+  useIaScoreHistorico,
+  useIaBenchmarkSetorial,
+  useCalcularScore,
+} from "../api/queries";
 import { extrairErro } from "../api/client";
 import { GD } from "../theme";
 
@@ -34,45 +40,34 @@ const COMPONENTES = [
 export default function ScoreLogistico() {
   const { empresaAtivaId } = useEmpresa();
   const fb = useFeedback();
-  const [status, setStatus] = useState(null);
-  const [score, setScore] = useState(null);
-  const [historico, setHistorico] = useState([]);
-  const [setorial, setSetorial] = useState(null);
-  const [carregando, setCarregando] = useState(false);
 
-  const carregar = useCallback(async () => {
-    if (!empresaAtivaId) return;
-    setCarregando(true);
-    try {
-      const [st, sc, hist, set] = await Promise.all([
-        inteligenciaApi.status(),
-        inteligenciaApi.obterScore(empresaAtivaId),
-        inteligenciaApi.historicoScore(empresaAtivaId),
-        inteligenciaApi.benchmarkSetorial(empresaAtivaId),
-      ]);
-      setStatus(st);
-      setScore(sc);
-      setHistorico(hist.reverse());
-      setSetorial(set);
-    } catch (e) {
-      fb.erro(extrairErro(e));
-    } finally {
-      setCarregando(false);
-    }
-  }, [empresaAtivaId, fb]);
+  const statusQ = useIaStatus();
+  const scoreQ = useIaScore(empresaAtivaId);
+  const historicoQ = useIaScoreHistorico(empresaAtivaId);
+  const setorialQ = useIaBenchmarkSetorial(empresaAtivaId);
+  const calcularMut = useCalcularScore(empresaAtivaId);
 
-  useEffect(() => { carregar(); }, [carregar]);
+  const status = statusQ.data ?? null;
+  const score = scoreQ.data ?? null;
+  const historico = historicoQ.data ?? [];
+  const setorial = setorialQ.data ?? null;
+  const carregando =
+    statusQ.isFetching || scoreQ.isFetching || historicoQ.isFetching ||
+    setorialQ.isFetching || calcularMut.isPending;
+
+  useEffect(() => {
+    const e = scoreQ.error || historicoQ.error || setorialQ.error;
+    if (e) fb.erro(extrairErro(e));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scoreQ.error, historicoQ.error, setorialQ.error]);
 
   const recalcular = async () => {
-    setCarregando(true);
     try {
-      await inteligenciaApi.calcularScore(empresaAtivaId);
+      await calcularMut.mutateAsync();
       fb.sucesso("Score recalculado.");
-      carregar();
+      // A invalidação da mutação recarrega score e histórico automaticamente.
     } catch (e) {
       fb.erro(extrairErro(e));
-    } finally {
-      setCarregando(false);
     }
   };
 
@@ -92,7 +87,7 @@ export default function ScoreLogistico() {
         valor: score.componentes?.[c.chave] ?? 0,
       }))
     : [];
-  const histData = historico.map((h) => ({
+  const histData = [...historico].reverse().map((h) => ({
     data: new Date(h.created_at).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" }),
     score: h.score_total,
   }));

@@ -17,6 +17,7 @@ import { useFeedback } from "../components/Feedback";
 import { relatoriosApi } from "../api/endpoints";
 import { extrairErro } from "../api/client";
 import { useEmpresa } from "../contexts/EmpresaContext";
+import { useTelaEstado } from "../hooks/useTelaEstado";
 import { GD } from "../theme";
 
 function CartaoRelatorio({ icone, titulo, descricao, cor, textoBotao, onBaixar, ocupado }) {
@@ -52,8 +53,10 @@ function CartaoRelatorio({ icone, titulo, descricao, cor, textoBotao, onBaixar, 
 export default function Relatorios() {
   const { sucesso, erro: erroToast } = useFeedback();
   const { empresaAtiva, empresaAtivaId } = useEmpresa();
-  const [dataInicio, setDataInicio] = useState("");
-  const [dataFim, setDataFim] = useState("");
+  const [filtro, , patchFiltro] = useTelaEstado("relatorios", { dataInicio: "", dataFim: "" });
+  const { dataInicio, dataFim } = filtro;
+  const setDataInicio = (v) => patchFiltro({ dataInicio: v });
+  const setDataFim = (v) => patchFiltro({ dataFim: v });
   const [ocupado, setOcupado] = useState(null);
 
   const baixar = async (formato) => {

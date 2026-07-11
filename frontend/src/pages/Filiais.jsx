@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useState } from "react";
 import {
   Box,
   Button,
@@ -20,7 +20,7 @@ import PageHeader from "../components/PageHeader";
 import Tabela, { VazioEstado } from "../components/Tabela";
 import ConfirmDialog from "../components/ConfirmDialog";
 import { useFeedback } from "../components/Feedback";
-import { empresasApi } from "../api/endpoints";
+import { useFiliais, useMutacoesFilial } from "../api/queries";
 import { extrairErro } from "../api/client";
 import { useEmpresa } from "../contexts/EmpresaContext";
 import { mascararCnpj, soDigitos, UFS } from "../utils/format";
@@ -28,29 +28,14 @@ import { mascararCnpj, soDigitos, UFS } from "../utils/format";
 export default function Filiais() {
   const { sucesso, erro: erroToast } = useFeedback();
   const { empresaAtiva, empresaAtivaId } = useEmpresa();
-  const [linhas, setLinhas] = useState([]);
-  const [carregando, setCarregando] = useState(false);
+  const { data: linhas = [], isLoading: carregando, error } = useFiliais(empresaAtivaId);
+  const { criar, atualizar, remover: removerMut } = useMutacoesFilial(empresaAtivaId);
   const [dialogo, setDialogo] = useState(false);
   const [editando, setEditando] = useState(null);
   const [form, setForm] = useState({ razao_social: "", cnpj: "", cidade: "", uf: "" });
-  const [salvando, setSalvando] = useState(false);
   const [confirmar, setConfirmar] = useState(null);
 
-  const carregar = useCallback(async () => {
-    if (!empresaAtivaId) return;
-    setCarregando(true);
-    try {
-      setLinhas(await empresasApi.listarFiliais(empresaAtivaId));
-    } catch (e) {
-      erroToast(extrairErro(e));
-    } finally {
-      setCarregando(false);
-    }
-  }, [empresaAtivaId, erroToast]);
-
-  useEffect(() => {
-    carregar();
-  }, [carregar]);
+  if (error) erroToast(extrairErro(error));
 
   const abrirNovo = () => {
     setEditando(null);
@@ -68,8 +53,9 @@ export default function Filiais() {
     setDialogo(true);
   };
 
+  const salvando = criar.isPending || atualizar.isPending;
+
   const salvar = async () => {
-    setSalvando(true);
     try {
       const payload = {
         empresa_id: empresaAtivaId,
@@ -79,26 +65,22 @@ export default function Filiais() {
         uf: form.uf,
       };
       if (editando) {
-        await empresasApi.atualizarFilial(editando.id, payload);
+        await atualizar.mutateAsync({ id: editando.id, payload });
         sucesso("Filial atualizada.");
       } else {
-        await empresasApi.criarFilial(empresaAtivaId, payload);
+        await criar.mutateAsync(payload);
         sucesso("Filial cadastrada.");
       }
       setDialogo(false);
-      await carregar();
     } catch (e) {
       erroToast(extrairErro(e, "Não foi possível salvar a filial."));
-    } finally {
-      setSalvando(false);
     }
   };
 
   const remover = async () => {
     try {
-      await empresasApi.removerFilial(confirmar.id);
+      await removerMut.mutateAsync(confirmar.id);
       sucesso("Filial removida.");
-      await carregar();
     } catch (e) {
       erroToast(extrairErro(e));
     } finally {

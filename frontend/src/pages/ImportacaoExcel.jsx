@@ -26,6 +26,7 @@ import ResultadoImportacao from "../components/ResultadoImportacao";
 import GerenciarDadosImportados from "../components/GerenciarDadosImportados";
 import { useFeedback } from "../components/Feedback";
 import { importacaoApi } from "../api/endpoints";
+import { useInvalidarDadosEmpresa } from "../api/queries";
 import { extrairErro } from "../api/client";
 import { useEmpresa } from "../contexts/EmpresaContext";
 import { GD } from "../theme";
@@ -48,6 +49,7 @@ const COLUNAS_ESPERADAS = [
 export default function ImportacaoExcel() {
   const { sucesso, erro: erroToast } = useFeedback();
   const { empresaAtiva, empresaAtivaId } = useEmpresa();
+  const invalidarDadosEmpresa = useInvalidarDadosEmpresa();
   const inputRef = useRef(null);
   const [arquivo, setArquivo] = useState(null);
   const [arrastar, setArrastar] = useState(false);
@@ -86,6 +88,7 @@ export default function ImportacaoExcel() {
           : `${res.importados} registro(s) importado(s).`;
       sucesso(msg);
       setArquivo(null);
+      invalidarDadosEmpresa(empresaAtivaId);
     } catch (e) {
       erroToast(extrairErro(e, "Falha ao importar a planilha."));
     } finally {

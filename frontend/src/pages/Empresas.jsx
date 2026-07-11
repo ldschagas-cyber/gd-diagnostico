@@ -6,7 +6,8 @@
  * - Cadastro de filiais em lote: cole vários CNPJs e o sistema busca e cadastra todos de uma vez
  * - Gerenciamento de filiais individuais na mesma tela
  */
-import { useEffect, useState, useCallback } from "react";
+import { useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   Box, Grid, Card, CardContent, CardHeader, Button, TextField,
   Table, TableHead, TableRow, TableCell, TableBody, Typography,
@@ -26,6 +27,8 @@ import PlaylistAddIcon  from "@mui/icons-material/PlaylistAdd";
 import PageHeader       from "../components/PageHeader";
 import ConfirmDialog    from "../components/ConfirmDialog";
 import { useFeedback }  from "../components/Feedback";
+import { useEmpresas, useFiliais, useMutacoesEmpresa, useMutacoesFilial } from "../api/queries";
+import { qk } from "../api/queryKeys";
 import { empresasApi }  from "../api/endpoints";
 import { extrairErro }  from "../api/client";
 import { mascararCnpj, soDigitos } from "../utils/format";
@@ -206,6 +209,7 @@ function FilialForm({ inicial, empresaId, onSalvar, onCancelar }) {
 
 // ── Cadastro em lote de filiais ────────────────────────────────────────────
 function FilialLoteDialog({ open, empresa, onFechar, onConcluir }) {
+  const qc = useQueryClient();
   const [cnpjs, setCnpjs]       = useState("");
   const [progresso, setProgresso] = useState([]);
   const [rodando, setRodando]   = useState(false);
@@ -246,7 +250,10 @@ function FilialLoteDialog({ open, empresa, onFechar, onConcluir }) {
     }
 
     setRodando(false);
-    if (cadastradas > 0) onConcluir(cadastradas);
+    if (cadastradas > 0) {
+      qc.invalidateQueries({ queryKey: qk.filiais(empresa.id) });
+      onConcluir(cadastradas);
+    }
   };
 
   const fechar = () => {
@@ -322,81 +329,63 @@ function FilialLoteDialog({ open, empresa, onFechar, onConcluir }) {
 // ── Página principal ───────────────────────────────────────────────────────
 export default function Empresas() {
   const { sucesso, erro: erroToast } = useFeedback();
-  const [empresas, setEmpresas]       = useState([]);
+  const { data: empresas = [], isLoading: carregando, error } = useEmpresas();
   const [selecionada, setSelecionada] = useState(null);
-  const [filiais, setFiliais]         = useState([]);
-  const [carregando, setCarregando]   = useState(false);
+  const { data: filiais = [] } = useFiliais(selecionada?.id);
+  const { criar: criarEmpresa, atualizar: atualizarEmpresa, inativar } = useMutacoesEmpresa();
+  const { criar: criarFilial, atualizar: atualizarFilial, remover: removerFilial } = useMutacoesFilial(selecionada?.id);
   const [dialogEmp, setDialogEmp]     = useState(null);
   const [dialogFil, setDialogFil]     = useState(null);
   const [dialogLote, setDialogLote]   = useState(false);
   const [confirmar, setConfirmar]     = useState(null);
 
-  const carregarEmpresas = useCallback(async () => {
-    setCarregando(true);
-    try { setEmpresas(await empresasApi.listar()); }
-    catch (e) { erroToast(extrairErro(e)); }
-    finally { setCarregando(false); }
-  }, [erroToast]);
-
-  useEffect(() => { carregarEmpresas(); }, [carregarEmpresas]);
-
-  useEffect(() => {
-    if (!selecionada) { setFiliais([]); return; }
-    empresasApi.listarFiliais(selecionada.id).then(setFiliais).catch(() => {});
-  }, [selecionada]);
+  if (error) erroToast(extrairErro(error));
 
   const salvarEmpresa = async (payload) => {
     try {
       if (dialogEmp?.id) {
-        await empresasApi.atualizar(dialogEmp.id, payload);
+        await atualizarEmpresa.mutateAsync({ id: dialogEmp.id, payload });
         sucesso("Empresa atualizada.");
         if (selecionada?.id === dialogEmp.id) setSelecionada({ ...selecionada, ...payload });
       } else {
-        const nova = await empresasApi.criar(payload);
+        const nova = await criarEmpresa.mutateAsync(payload);
         sucesso("Empresa criada.");
         setSelecionada(nova);
       }
       setDialogEmp(null);
-      carregarEmpresas();
     } catch (e) { erroToast(extrairErro(e)); }
   };
 
   const excluirEmpresa = async (id) => {
     try {
-      await empresasApi.inativar(id);
+      await inativar.mutateAsync(id);
       sucesso("Empresa removida.");
       if (selecionada?.id === id) setSelecionada(null);
-      carregarEmpresas();
     } catch (e) { erroToast(extrairErro(e)); }
   };
 
   const salvarFilial = async (payload) => {
     try {
       if (dialogFil?.id) {
-        await empresasApi.atualizarFilial(dialogFil.id, payload);
+        await atualizarFilial.mutateAsync({ id: dialogFil.id, payload });
         sucesso("Filial atualizada.");
       } else {
-        await empresasApi.criarFilial(selecionada.id, payload);
+        await criarFilial.mutateAsync(payload);
         sucesso("Filial criada.");
       }
       setDialogFil(null);
-      const lista = await empresasApi.listarFiliais(selecionada.id);
-      setFiliais(lista);
     } catch (e) { erroToast(extrairErro(e)); }
   };
 
   const excluirFilial = async (id) => {
     try {
-      await empresasApi.removerFilial(id);
+      await removerFilial.mutateAsync(id);
       sucesso("Filial removida.");
-      setFiliais((p) => p.filter((f) => f.id !== id));
     } catch (e) { erroToast(extrairErro(e)); }
   };
 
-  const aoConcluirLote = async (qtd) => {
+  const aoConcluirLote = (qtd) => {
     sucesso(`${qtd} filial(is) cadastrada(s) com sucesso.`);
-    const lista = await empresasApi.listarFiliais(selecionada.id);
-    setFiliais(lista);
   };
 
   return (

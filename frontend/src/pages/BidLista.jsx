@@ -1,4 +1,3 @@
-import { useEffect, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Box, Button, Card, CardContent, Grid, Typography, Stack,
@@ -11,7 +10,7 @@ import { VazioEstado } from "../components/Tabela";
 import BidStatusChip from "../components/BidStatusChip";
 import StatCard from "../components/StatCard";
 import { useEmpresa } from "../contexts/EmpresaContext";
-import { bidApi } from "../api/endpoints";
+import { useBidLista, useBidDashboard } from "../api/queries";
 import { extrairErro } from "../api/client";
 import { fmtMoeda, fmtNumero } from "../utils/format";
 import { GD } from "../theme";
@@ -19,30 +18,15 @@ import { GD } from "../theme";
 export default function BidLista() {
   const { empresaAtivaId, empresaAtiva } = useEmpresa();
   const nav = useNavigate();
-  const [bids, setBids] = useState([]);
-  const [kpis, setKpis] = useState(null);
-  const [carregando, setCarregando] = useState(false);
-  const [erro, setErro] = useState("");
 
-  const carregar = useCallback(async () => {
-    if (!empresaAtivaId) return;
-    setCarregando(true);
-    setErro("");
-    try {
-      const [lista, dash] = await Promise.all([
-        bidApi.listar(empresaAtivaId),
-        bidApi.dashboard(empresaAtivaId),
-      ]);
-      setBids(lista);
-      setKpis(dash);
-    } catch (e) {
-      setErro(extrairErro(e));
-    } finally {
-      setCarregando(false);
-    }
-  }, [empresaAtivaId]);
+  // Lista e KPIs via React Query: cache + dedup; retorno à tela é instantâneo.
+  const { data: bids = [], isFetching: carregandoLista, error: erroLista } =
+    useBidLista(empresaAtivaId);
+  const { data: kpis, isFetching: carregandoKpis, error: erroKpis } =
+    useBidDashboard(empresaAtivaId);
 
-  useEffect(() => { carregar(); }, [carregar]);
+  const carregando = carregandoLista || carregandoKpis;
+  const erro = erroLista || erroKpis;
 
   if (!empresaAtivaId) {
     return (
@@ -66,7 +50,7 @@ export default function BidLista() {
       />
 
       {carregando && <LinearProgress sx={{ mb: 2 }} />}
-      {erro && <Alert severity="error" sx={{ mb: 2 }}>{erro}</Alert>}
+      {erro && <Alert severity="error" sx={{ mb: 2 }}>{extrairErro(erro)}</Alert>}
 
       {kpis && (
         <Grid container spacing={2.5} sx={{ mb: 3 }}>

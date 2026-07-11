@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useState } from "react";
 import { useParams } from "react-router-dom";
 import {
   Box, Card, CardContent, Grid, TextField, Button, Stack, MenuItem, Select,
@@ -10,6 +10,7 @@ import DownloadIcon from "@mui/icons-material/Download";
 import { useFeedback } from "../components/Feedback";
 import { useEmpresa } from "../contexts/EmpresaContext";
 import { bidApi } from "../api/endpoints";
+import { useBidPropostas, useBidTransp, useMutacoesPropostas } from "../api/queries";
 import { extrairErro } from "../api/client";
 import { fmtMoeda, fmtNumero } from "../utils/format";
 
@@ -36,23 +37,15 @@ export default function BidPropostas() {
   const { id } = useParams();
   const { empresaAtivaId } = useEmpresa();
   const { sucesso, erro: erroToast } = useFeedback();
-  const [propostas, setPropostas] = useState([]);
-  const [bts, setBts] = useState([]);
+
+  const { data: propostas = [], isFetching: carregandoPropostas } = useBidPropostas(id);
+  const { data: bts = [] } = useBidTransp(id);
+  const mut = useMutacoesPropostas(id, empresaAtivaId);
+  const carregando = carregandoPropostas;
+  const salvando = mut.incluir.isPending;
+
   const [form, setForm] = useState(VAZIO);
-  const [salvando, setSalvando] = useState(false);
   const [aba, setAba] = useState(0);
-  const [carregando, setCarregando] = useState(false);
-
-  const carregar = useCallback(async () => {
-    setCarregando(true);
-    try {
-      const [p, t] = await Promise.all([bidApi.listarPropostas(id), bidApi.listarTransp(id)]);
-      setPropostas(p); setBts(t);
-    } catch (e) { erroToast(extrairErro(e)); }
-    finally { setCarregando(false); }
-  }, [id, erroToast]);
-
-  useEffect(() => { carregar(); }, [carregar]);
 
   const onChange = (c) => (e) => setForm((f) => ({ ...f, [c]: e.target.value }));
 
@@ -60,9 +53,8 @@ export default function BidPropostas() {
     if (!form.bid_transportadora_id || !form.valor_grupo || !form.valor_rs_kg) {
       erroToast("Preencha transportadora, grupo e valor R$/kg."); return;
     }
-    setSalvando(true);
     try {
-      await bidApi.incluirProposta(id, {
+      await mut.incluir.mutateAsync({
         ...form,
         bid_transportadora_id: Number(form.bid_transportadora_id),
         valor_rs_kg: Number(form.valor_rs_kg),
@@ -70,20 +62,19 @@ export default function BidPropostas() {
         prazo_dias: Number(form.prazo_dias) || 0,
         cobertura_pct: Number(form.cobertura_pct) || 100,
       });
-      sucesso("Proposta incluída."); setForm(VAZIO); await carregar();
+      sucesso("Proposta incluída."); setForm(VAZIO);
     } catch (e) { erroToast(extrairErro(e)); }
-    finally { setSalvando(false); }
   };
 
   const importar = async (e) => {
     const f = e.target.files[0];
     if (!f) return;
     try {
-      const r = await bidApi.importarPropostas(id, empresaAtivaId, f);
+      const r = await mut.importar.mutateAsync(f);
       const msg = r.ignoradas > 0
         ? `${r.importadas} propostas importadas · ${r.ignoradas} ignoradas (transportadora não convidada ou sem preço).`
         : `${r.importadas} propostas importadas.`;
-      sucesso(msg); await carregar();
+      sucesso(msg);
     } catch (ex) { erroToast(extrairErro(ex)); }
     e.target.value = "";
   };

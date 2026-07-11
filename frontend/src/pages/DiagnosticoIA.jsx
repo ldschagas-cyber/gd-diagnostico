@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useState } from "react";
 import {
   Box, Card, CardContent, Typography, Button, LinearProgress,
   Stack, Divider, Chip, Alert,
@@ -15,6 +15,7 @@ import ModoSimuladoBanner from "../components/ModoSimuladoBanner";
 import { VazioEstado } from "../components/Tabela";
 import { useEmpresa } from "../contexts/EmpresaContext";
 import { useFeedback } from "../components/Feedback";
+import { useIaStatus, useIaDiagnostico, useGerarDiagnosticoIA } from "../api/queries";
 import { inteligenciaApi } from "../api/endpoints";
 import { extrairErro } from "../api/client";
 import { fmtMoeda } from "../utils/format";
@@ -37,13 +38,21 @@ function Secao({ titulo, conteudo, cor }) {
 export default function DiagnosticoIA() {
   const { empresaAtivaId } = useEmpresa();
   const fb = useFeedback();
-  const [status, setStatus] = useState(null);
-  const [diag, setDiag] = useState(null);
-  const [carregando, setCarregando] = useState(false);
-  const [gerando, setGerando] = useState(false);
-  const [semDiagnostico, setSemDiagnostico] = useState(false);
   const [menuRel, setMenuRel] = useState(null);
   const [baixando, setBaixando] = useState(false);
+
+  const statusQ = useIaStatus();
+  const diagQ = useIaDiagnostico(empresaAtivaId);
+  const gerarMut = useGerarDiagnosticoIA(empresaAtivaId);
+
+  const status = statusQ.data ?? null;
+  const diag = diagQ.data ?? null;
+  const gerando = gerarMut.isPending;
+  // obterDiagnostico devolve erro (ex.: 404) quando ainda não há diagnóstico gerado;
+  // isso é tratado como estado "vazio", não como falha — mesmo comportamento do
+  // try/catch silencioso original.
+  const semDiagnostico = !diagQ.isLoading && !diag;
+  const carregando = statusQ.isFetching || diagQ.isFetching;
 
   const baixarRelatorio = async (formato) => {
     setMenuRel(null);
@@ -58,40 +67,12 @@ export default function DiagnosticoIA() {
     }
   };
 
-  const carregar = useCallback(async () => {
-    if (!empresaAtivaId) return;
-    setCarregando(true);
-    setSemDiagnostico(false);
-    try {
-      const st = await inteligenciaApi.status();
-      setStatus(st);
-      try {
-        const d = await inteligenciaApi.obterDiagnostico(empresaAtivaId);
-        setDiag(d);
-      } catch {
-        setSemDiagnostico(true);
-        setDiag(null);
-      }
-    } catch (e) {
-      fb.erro(extrairErro(e));
-    } finally {
-      setCarregando(false);
-    }
-  }, [empresaAtivaId, fb]);
-
-  useEffect(() => { carregar(); }, [carregar]);
-
   const gerar = async (forcar) => {
-    setGerando(true);
     try {
-      const d = await inteligenciaApi.gerarDiagnostico(empresaAtivaId, forcar);
-      setDiag(d);
-      setSemDiagnostico(false);
+      await gerarMut.mutateAsync(forcar);
       fb.sucesso("Diagnóstico gerado.");
     } catch (e) {
       fb.erro(extrairErro(e));
-    } finally {
-      setGerando(false);
     }
   };
 

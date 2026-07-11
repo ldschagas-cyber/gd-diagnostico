@@ -50,7 +50,7 @@ export function usePrefetch() {
             transportadorasApi.listar(empresaAtivaId)
           );
           break;
-        case "/benchmark/nacional":
+        case "/benchmark/diagnostico":
           pre(qk.benchmarkNacional(empresaAtivaId, {}), () =>
             benchmarkApi.nacional(empresaAtivaId)
           );

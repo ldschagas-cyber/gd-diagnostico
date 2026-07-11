@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useState } from "react";
 import { useParams } from "react-router-dom";
 import {
   Box, Card, CardContent, Stack, Button, MenuItem, Select, FormControl,
@@ -8,7 +8,7 @@ import {
 import AddIcon from "@mui/icons-material/Add";
 import { useFeedback } from "../components/Feedback";
 import { useEmpresa } from "../contexts/EmpresaContext";
-import { bidApi, transportadorasApi } from "../api/endpoints";
+import { useBidTransp, useMutacoesTranspBid, useTransportadoras } from "../api/queries";
 import { extrairErro } from "../api/client";
 import { TRANSP_STATUS_CONFIG } from "../components/BidStatusChip";
 import ConfirmDialog from "../components/ConfirmDialog";
@@ -19,51 +19,43 @@ export default function BidTransportadoras() {
   const { id } = useParams();
   const { empresaAtivaId } = useEmpresa();
   const { sucesso, erro: erroToast } = useFeedback();
-  const [lista, setLista] = useState([]);
-  const [disponiveis, setDisponiveis] = useState([]);
+
+  const { data: lista = [], isFetching: carregandoLista } = useBidTransp(id);
+  const { data: transp = [] } = useTransportadoras(empresaAtivaId);
+  const mut = useMutacoesTranspBid(id, empresaAtivaId);
+  const carregando = carregandoLista;
+
   const [sel, setSel] = useState("");
   const [obs, setObs] = useState("");
   const [avaliacao, setAvaliacao] = useState(5);
-  const [carregando, setCarregando] = useState(false);
   const [confirmar, setConfirmar] = useState(null);
 
-  const carregar = useCallback(async () => {
-    setCarregando(true);
-    try {
-      const [bts, transp] = await Promise.all([
-        bidApi.listarTransp(id),
-        transportadorasApi.listar(empresaAtivaId),
-      ]);
-      setLista(bts);
-      const ids = new Set(bts.map((b) => b.transportadora_id));
-      setDisponiveis(transp.filter((t) => !ids.has(t.id)));
-    } catch (e) { erroToast(extrairErro(e)); }
-    finally { setCarregando(false); }
-  }, [id, empresaAtivaId, erroToast]);
-
-  useEffect(() => { carregar(); }, [carregar]);
+  const idsConvidados = new Set(lista.map((b) => b.transportadora_id));
+  const disponiveis = transp.filter((t) => !idsConvidados.has(t.id));
 
   const convidar = async () => {
     if (!sel) return;
     try {
-      await bidApi.convidarTransp(id, empresaAtivaId, {
+      await mut.convidar.mutateAsync({
         transportadora_id: Number(sel), observacoes: obs, avaliacao_usuario: avaliacao,
       });
       sucesso("Transportadora convidada."); setSel(""); setObs("");
-      await carregar();
     } catch (e) { erroToast(extrairErro(e)); }
   };
 
   const mudarStatus = async (bt, novoStatus) => {
     try {
-      await bidApi.statusTransp(id, bt.id, novoStatus);
-      sucesso("Status atualizado."); await carregar();
+      await mut.status.mutateAsync({ tid: bt.id, status: novoStatus });
+      sucesso("Status atualizado.");
     } catch (e) { erroToast(extrairErro(e)); }
   };
 
   const remover = async () => {
-    await bidApi.removerTransp(id, confirmar.id);
-    setConfirmar(null); sucesso("Removida."); await carregar();
+    try {
+      await mut.remover.mutateAsync(confirmar.id);
+      sucesso("Removida.");
+    } catch (e) { erroToast(extrairErro(e)); }
+    finally { setConfirmar(null); }
   };
 
   const nomeTransp = (bt) =>

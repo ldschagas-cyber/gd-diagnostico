@@ -25,6 +25,7 @@ import IndicadorBaseCte from "../components/IndicadorBaseCte";
 import ImportacaoCancelamento from "../components/ImportacaoCancelamento";
 import { useFeedback } from "../components/Feedback";
 import { importacaoApi } from "../api/endpoints";
+import { useInvalidarDadosEmpresa } from "../api/queries";
 import { extrairErro } from "../api/client";
 import { useEmpresa } from "../contexts/EmpresaContext";
 import { GD } from "../theme";
@@ -32,6 +33,7 @@ import { GD } from "../theme";
 export default function ImportacaoCte() {
   const { sucesso, erro: erroToast } = useFeedback();
   const { empresaAtiva, empresaAtivaId } = useEmpresa();
+  const invalidarDadosEmpresa = useInvalidarDadosEmpresa();
   const inputRef = useRef(null);
   const [arquivos, setArquivos] = useState([]);
   const [arrastar, setArrastar] = useState(false);
@@ -71,6 +73,10 @@ export default function ImportacaoCte() {
       setArquivos([]);
       // Atualização automática do indicador de base de CT-e após a importação.
       setRecarregarIndicador((n) => n + 1);
+      // Invalida o cache de tudo que depende de CT-e (dashboard, DLG, benchmark,
+      // recomendações...) para que outras telas mostrem dado atualizado ao serem
+      // visitadas depois, sem precisar de F5.
+      invalidarDadosEmpresa(empresaAtivaId);
     } catch (e) {
       erroToast(extrairErro(e, "Falha ao importar os CT-es."));
     } finally {
