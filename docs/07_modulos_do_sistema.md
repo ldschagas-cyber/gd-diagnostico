@@ -59,32 +59,44 @@
 
 ## Benchmark Logístico
 
-### Benchmark legado (regional)
+> **Reorganizado na v6.9.0** — a Matriz Benchmark (OD) passou a ser a fonte única de referência R$/kg (SSoT), consumida por `BenchmarkUseCase`, DLG, Score Logístico, Insights, Oportunidades e Assistente IA. O benchmark regional legado (V1, tabela `benchmarks`) e o Benchmark de Corredor (Hub-a-Hub) deixaram de ser referências de mercado independentes — ver `docs/11_changelog.md` [6.9.0] para o detalhamento da migração.
+
+### Benchmark legado (regional, V1) — residual
 
 | | |
 |---|---|
-| **Telas** | `BenchmarkNacional.jsx`, `BenchmarkRegional.jsx`, `BenchmarkTransportadoras.jsx`, `PotencialEconomia.jsx`, `DashboardExecutivo.jsx` |
-| **Endpoints** | `benchmark_analise.py` (6), `benchmarks.py` (2) |
-| **Entidades** | `Benchmark`, `MetaNacional`, `MetaRegional` |
+| **Telas** | Nenhuma (`Benchmarks.jsx` existe no código mas está sem rota/menu — decisão de reativar ou remover pendente) |
+| **Endpoints** | `benchmarks.py` (2, CRUD ainda funcional, inacessível pela UI) |
+| **Entidades** | `Benchmark` — lido apenas por `DiagnosticoUseCase._referencia_mercado_pct` (campo `% Frete/Mercadoria`, que a Matriz Benchmark OD ainda não modela) |
 | **Regras** | RN-13 a RN-16 |
 
-### Benchmark OD / Corredor (V2.1)
+### Benchmark Logístico — telas correntes (v6.9.0)
 
 | | |
 |---|---|
-| **Telas** | `BenchmarkCorredores.jsx`, `Clusters.jsx`, `BenchmarksCorredor.jsx` (config. de referências, admin) |
-| **Endpoints** | `benchmark_od_config.py` (13, hubs+clusters+corredores), `benchmark_analise.py` (`/benchmark/corredores/{id}`) |
+| **Telas** | `DashboardExecutivo.jsx` (visão executiva), `BenchmarkDiagnostico.jsx` (Nacional/Regional/Corredor/Transportadoras, seletor único), `BenchmarkComparativoMercado.jsx` (cliente × mercado por percentil, com `IndicadoresTransversais.jsx` — confiabilidade/cobertura), `PotencialEconomia.jsx` (com simulador de cenário P50/P25/P10) |
+| **Endpoints** | `benchmark_analise.py` (6 + 3 novos: `comparativo-mercado`, `simulador-economia`, `indicadores-mercado`), `benchmark_v2_api.py` (8) |
+| **Entidades** | `benchmark_mercado`, `benchmark_observado`, `benchmark_cliente` |
+| **Use case novo** | `benchmark_dashboard.py` — não calcula, compõe `BenchmarkV2UseCase`/`BenchmarkObservadoUseCase` para as telas acima |
+| **Regras** | RN-22 a RN-24 |
+
+### Benchmark de Corredor (Hub-a-Hub) — detalhamento informativo
+
+| | |
+|---|---|
+| **Telas** | `HubsLogisticos.jsx` (catálogo de hubs + mapeamento cliente→hub, ex-`Clusters.jsx`), `BenchmarksCorredor.jsx` (config. de referências, admin) |
+| **Endpoints** | `benchmark_od_config.py` (13, hubs+clusters+corredores) |
 | **Entidades** | `HubLogistico`, `ClusterCliente`, `BenchmarkCorredor` |
-| **Regras** | RN-17 a RN-21 |
+| **Regras** | RN-17 a RN-21 — resultado exibido como detalhamento (`por_corredor`) dentro de `PotencialEconomia.jsx`, não mais como referência de mercado própria |
 
-### Benchmark V2 (Matriz de Mercado) e MBL
+### MBL — Benchmark Estatístico
 
 | | |
 |---|---|
-| **Telas** | `MatrizOD.jsx` (matriz de mercado, admin), `BenchmarkMBL.jsx` |
-| **Endpoints** | `benchmark_v2_api.py` (8), `mbl.py` (3) |
-| **Entidades** | `benchmark_mercado`, `benchmark_observado`, `benchmark_cliente`, `mbl_benchmark` |
-| **Regras** | RN-22 a RN-24 (V2), RN-30 a RN-33 (MBL) |
+| **Telas** | `BenchmarkMBL.jsx` |
+| **Endpoints** | `mbl.py` (3) |
+| **Entidades** | `mbl_benchmark` |
+| **Regras** | RN-30 a RN-33 — isolado dos demais modelos de benchmark: serve DLG (classificação de eficiência) e MCL (score/limite de rejeição de proposta de BID), não é referência de mercado externa |
 
 ## Concorrência Logística — BID de Frete
 

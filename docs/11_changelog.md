@@ -140,6 +140,28 @@ Seis ajustes de UI em `frontend/src/pages/BenchmarkNacional.jsx` e `frontend/src
 
 **Sem regressão**: `BenchmarkComparacao` é usado exclusivamente por esta tela — nenhuma outra página do Benchmark foi afetada pela mudança de rótulos.
 
+## [6.8.0] — Migração de telas para React Query (DT-18)
+
+Substitui `useState`/`useEffect` + chamada direta a `endpoints.js` por hooks de `queries.js` (cache, invalidação e mutação padronizados via TanStack React Query) nas telas de Cadastros (Usuários, Cidades, Regiões, Empresas, Filiais, Metas), Importação (CT-e, Excel), Relatórios, DLG, todo o módulo BID e todo o módulo Inteligência IA. Resolve parcialmente o débito DT-18/DT-07 (`docs/10_roadmap.md`).
+
+**Sem mudança de contrato ou comportamento**: endpoints e regras de negócio não mudam — é troca do mecanismo de busca/estado local por cache compartilhado.
+
+## [6.9.0] — Matriz Benchmark (OD) como fonte única de mercado
+
+**Consolidação SSoT do benchmark de mercado**: os consumidores de referência R$/kg (`BenchmarkUseCase`, DLG, Score Logístico, Insights, Oportunidades, Assistente IA) migram do benchmark regional legado (V1, tabela `benchmarks`) para a Matriz Benchmark (OD) / `benchmark_mercado` — já declarada fonte de verdade em `MatrizOD.jsx` desde a v6.0.0. O Benchmark de Corredor (Hub-a-Hub) deixa de ser uma segunda referência de mercado e passa a detalhamento informativo dentro do Potencial de Economia (`BenchmarkUseCase.potencial_economia`, campo `por_corredor`).
+
+**Frontend — reorganização do menu "Benchmark Logístico"**: telas antigas de recorte isolado (`BenchmarkNacional.jsx`, `BenchmarkRegional.jsx`, `BenchmarkTransportadoras.jsx`, `BenchmarkCorredores.jsx`) removidas, substituídas por `DashboardExecutivo.jsx`, `BenchmarkDiagnostico.jsx` (Nacional/Regional/Corredor/Transportadoras consolidados em uma tela com seletor), `BenchmarkComparativoMercado.jsx` (novo componente `IndicadoresTransversais.jsx` — confiabilidade e cobertura do benchmark) e `PotencialEconomia.jsx` (ganha simulador de cenário P50/P25/P10). `Clusters.jsx` renomeado para `HubsLogisticos.jsx`, unificando cadastro de hub + mapeamento cliente→hub numa única tela.
+
+**Backend**: novo use case `benchmark_dashboard.py` — não introduz cálculo de negócio novo, compõe `BenchmarkV2UseCase` e `BenchmarkObservadoUseCase` já existentes para alimentar as telas novas (`confiabilidade`, `cobertura`, `comparativo_mercado`, `simulador_economia`). Novos endpoints em `benchmark_analise.py`: `GET /benchmark/comparativo-mercado/{empresa_id}`, `GET /benchmark/simulador-economia/{empresa_id}`, `GET /benchmark/indicadores-mercado/{empresa_id}`.
+
+**Gap conhecido, não resolvido nesta versão**: o schema de `benchmark_mercado` só modela R$/kg, não `% Frete/Mercadoria` — por isso `DiagnosticoUseCase._referencia_mercado_pct` continua lendo o benchmark V1 legado só para esse campo (comentário no próprio método). A tela de administração do V1 (`Benchmarks.jsx`) ficou sem rota/menu — decisão formal (readicionar ao menu como cadastro remanescente, ou remover) pendente para a próxima versão.
+
+**Sem migration**: nenhuma tabela nova; `benchmark_mercado`/`benchmark_observado`/`benchmark_cliente` já existiam desde a v6.0.0.
+
+## [6.9.1] — SEC-01: bloqueia VISUALIZADOR nos endpoints de cluster
+
+Adiciona a dependency `bloquear_visualizador` aos 4 endpoints de escrita de `/empresas/{id}/clusters` (criar, importar Excel, atualizar, remover), que aceitavam escrita de um usuário com papel somente-leitura. Fecha o último achado de RBAC pendente da auditoria de segurança (Fase 5, `docs/18_fase5_seguranca.md`; item #11 do plano diretor, Etapa 4). Novo teste de regressão em `test_isolamento_v6_5_1.py`.
+
 ---
 
 ## Nota sobre nomenclatura de versão
