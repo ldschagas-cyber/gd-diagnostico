@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 
 from app.domain.entities import BenchmarkCorredor, ClusterCliente, HubLogistico
 from app.presentation.api.dependencies import (
+    bloquear_visualizador,
     get_benchmark_corredor_repo,
     get_cluster_repo,
     get_current_superuser,
@@ -84,7 +85,8 @@ def listar_clusters(
 def criar_cluster(
     empresa_id: int,
     payload: ClusterClienteIn,
-    _=Depends(verificar_acesso_empresa),
+    _ac=Depends(verificar_acesso_empresa),
+    _=Depends(bloquear_visualizador),
     repo=Depends(get_cluster_repo),
     hub_repo=Depends(get_hub_repo),
     empresa_repo=Depends(get_empresa_repo),
@@ -153,7 +155,8 @@ def baixar_modelo_clusters(
 async def importar_clusters_excel(
     empresa_id: int,
     arquivo: UploadFile = File(...),
-    _=Depends(verificar_acesso_empresa),
+    _ac=Depends(verificar_acesso_empresa),
+    _=Depends(bloquear_visualizador),
     repo=Depends(get_cluster_repo),
     hub_repo=Depends(get_hub_repo),
     empresa_repo=Depends(get_empresa_repo),
@@ -215,7 +218,8 @@ def atualizar_cluster(
     empresa_id: int,
     cluster_id: int,
     payload: ClusterClienteIn,
-    _=Depends(verificar_acesso_empresa),
+    _ac=Depends(verificar_acesso_empresa),
+    _=Depends(bloquear_visualizador),
     repo=Depends(get_cluster_repo),
     hub_repo=Depends(get_hub_repo),
 ):
@@ -232,7 +236,8 @@ def atualizar_cluster(
 def remover_cluster(
     empresa_id: int,
     cluster_id: int,
-    _=Depends(verificar_acesso_empresa),
+    _ac=Depends(verificar_acesso_empresa),
+    _=Depends(bloquear_visualizador),
     repo=Depends(get_cluster_repo),
 ):
     atual = repo.get(cluster_id)

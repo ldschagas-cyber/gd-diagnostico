@@ -184,6 +184,12 @@ def test_visualizador_e_somente_leitura(client):
         f"/api/v1/recomendacoes/{empresa}/consolidar", headers=viewer
     ).status_code == 403
 
+    assert client.post(
+        f"/api/v1/empresas/{empresa}/clusters",
+        json={"uf": "SP", "municipio": "", "hub_id": 1},
+        headers=viewer,
+    ).status_code == 403, "VISUALIZADOR conseguiu criar cluster (SEC-01)"
+
     # A mesma escrita funciona normalmente para ANALISTA (não deve ficar mais restrito que antes)
     r = client.post("/api/v1/transportadoras", params={"empresa_id": empresa}, json={
         "razao_social": "Transportadora Permitida", "cnpj": "11444777000161",
