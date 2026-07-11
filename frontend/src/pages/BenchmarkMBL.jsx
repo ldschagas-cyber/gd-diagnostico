@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect } from "react";
 import {
   Box, Grid, Card, CardContent, Typography, Stack, Button, Chip,
   LinearProgress, Alert, ToggleButton, ToggleButtonGroup, TextField,
@@ -14,7 +14,8 @@ import PageHeader from "../components/PageHeader";
 import { VazioEstado } from "../components/Tabela";
 import { useEmpresa } from "../contexts/EmpresaContext";
 import { useFeedback } from "../components/Feedback";
-import { mblApi } from "../api/endpoints";
+import { useMblBenchmark, useMblComparar, useProcessarMbl } from "../api/queries";
+import { useTelaEstado } from "../hooks/useTelaEstado";
 import { extrairErro } from "../api/client";
 import { fmtNumero } from "../utils/format";
 import { GD } from "../theme";
@@ -35,64 +36,54 @@ export default function BenchmarkMBL() {
   const { empresaAtivaId } = useEmpresa();
   const { sucesso, erro: erroToast } = useFeedback();
 
-  const [dimensao, setDimensao] = useState("REGIAO");
-  const [metrica, setMetrica] = useState("RS_KG");
-  const [rows, setRows] = useState([]);
-  const [carregando, setCarregando] = useState(false);
-  const [processando, setProcessando] = useState(false);
-  const [threshold, setThreshold] = useState(5);
+  const [tela, , patch] = useTelaEstado("benchmark-mbl", {
+    dimensao: "REGIAO", metrica: "RS_KG", threshold: 5,
+    cmpSegmento: "", cmpValor: "", cmpValorCommitted: null,
+  });
+  const { dimensao, metrica, threshold, cmpSegmento, cmpValor, cmpValorCommitted } = tela;
+  const setDimensao = (v) => patch({ dimensao: v });
+  const setMetrica = (v) => patch({ metrica: v });
+  const setThreshold = (v) => patch({ threshold: v });
+  const setCmpSegmento = (v) => patch({ cmpSegmento: v });
+  const setCmpValor = (v) => patch({ cmpValor: v });
 
-  // comparador
-  const [cmpSegmento, setCmpSegmento] = useState("");
-  const [cmpValor, setCmpValor] = useState("");
-  const [cmpResult, setCmpResult] = useState(null);
+  const { data: rows = [], isFetching: carregando, error } = useMblBenchmark(empresaAtivaId, { dimensao, metrica });
+  const comparaQ = useMblComparar(empresaAtivaId, {
+    dimensao, segmento: cmpSegmento, metrica, valor: cmpValorCommitted,
+  });
+  const cmpResult = comparaQ.data;
+  const processarMut = useProcessarMbl(empresaAtivaId);
+  const processando = processarMut.isPending;
 
-  const carregar = useCallback(async () => {
-    if (!empresaAtivaId) return;
-    setCarregando(true);
-    try {
-      setRows(await mblApi.benchmark(empresaAtivaId, { dimensao, metrica }));
-    } catch (e) {
-      erroToast(extrairErro(e));
-    } finally {
-      setCarregando(false);
-    }
-  }, [empresaAtivaId, dimensao, metrica, erroToast]);
+  useEffect(() => {
+    if (error) erroToast(extrairErro(error));
+  }, [error, erroToast]);
 
-  useEffect(() => { carregar(); }, [carregar]);
+  useEffect(() => {
+    if (comparaQ.error) erroToast(extrairErro(comparaQ.error));
+  }, [comparaQ.error, erroToast]);
 
   const processar = async () => {
     if (!empresaAtivaId) return;
-    setProcessando(true);
     try {
-      const r = await mblApi.processar(empresaAtivaId, { threshold });
+      const r = await processarMut.mutateAsync({ threshold });
       if (r.status === "sem_dados") {
         erroToast("Nenhum CT-e encontrado para construir o benchmark.");
       } else {
         sucesso(`Benchmark gerado: ${r.linhas_benchmark} linhas em ${r.periodos?.length || 0} período(s). Outliers do DLG excluídos.`);
       }
-      carregar();
+      // A mutação invalida o cache de MBL (benchmark + comparador) automaticamente.
     } catch (e) {
       erroToast(extrairErro(e));
-    } finally {
-      setProcessando(false);
     }
   };
 
-  const comparar = async () => {
+  const comparar = () => {
     if (!cmpSegmento || !cmpValor) {
       erroToast("Informe o segmento e o valor a comparar.");
       return;
     }
-    try {
-      const r = await mblApi.comparar(empresaAtivaId, {
-        dimensao, segmento: cmpSegmento, metrica, valor: Number(cmpValor),
-      });
-      setCmpResult(r);
-    } catch (e) {
-      setCmpResult(null);
-      erroToast(extrairErro(e));
-    }
+    patch({ cmpValorCommitted: Number(cmpValor) });
   };
 
   // dados do gráfico de curvas percentílicas (por segmento)

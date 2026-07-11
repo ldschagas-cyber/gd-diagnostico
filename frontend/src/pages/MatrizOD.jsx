@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useState } from "react";
 import {
   Box, Card, CardContent, Typography, Stack, TextField, Button,
   Table, TableHead, TableRow, TableCell, TableBody, MenuItem, IconButton,
@@ -8,7 +8,7 @@ import DeleteIcon from "@mui/icons-material/Delete";
 import GridOnIcon from "@mui/icons-material/GridOn";
 import PageHeader from "../components/PageHeader";
 import { useFeedback } from "../components/Feedback";
-import { mercadoApi } from "../api/endpoints";
+import { useMercadoOD, useMutacoesMercadoOD } from "../api/queries";
 import { extrairErro } from "../api/client";
 
 const REGIOES = ["NORTE", "NORDESTE", "CENTRO_OESTE", "SUDESTE", "SUL"];
@@ -26,11 +26,12 @@ const VAZIO = {
 
 export default function MatrizOD() {
   const { sucesso, erro: erroToast } = useFeedback();
-  const [lista, setLista] = useState([]);
-  const [carregando, setCarregando] = useState(false);
-  const [salvando, setSalvando] = useState(false);
+  const { data: lista = [], isLoading: carregando, error } = useMercadoOD();
+  const { salvar: salvarMut, remover: removerMut } = useMutacoesMercadoOD();
   const [form, setForm] = useState(VAZIO);
   const [orden, setOrden] = useState({ campo: "origem_regiao", asc: true });
+
+  if (error) erroToast(extrairErro(error));
 
   const ordenar = (campo) =>
     setOrden((o) => ({ campo, asc: o.campo === campo ? !o.asc : true }));
@@ -43,20 +44,9 @@ export default function MatrizOD() {
     return asc ? (va - vb) : (vb - va);
   });
 
-  const carregar = useCallback(async () => {
-    setCarregando(true);
-    try {
-      setLista(await mercadoApi.listar());
-    } catch (e) {
-      erroToast(extrairErro(e));
-    } finally {
-      setCarregando(false);
-    }
-  }, [erroToast]);
-
-  useEffect(() => { carregar(); }, [carregar]);
-
   const set = (campo, valor) => setForm((p) => ({ ...p, [campo]: valor }));
+
+  const salvando = salvarMut.isPending;
 
   const salvar = async () => {
     if (!form.origem_regiao || !form.destino_regiao) {
@@ -68,9 +58,8 @@ export default function MatrizOD() {
       erroToast("Informe ao menos a mediana (P50) em R$/kg.");
       return;
     }
-    setSalvando(true);
     try {
-      await mercadoApi.salvar({
+      await salvarMut.mutateAsync({
         origem_regiao: form.origem_regiao,
         destino_regiao: form.destino_regiao,
         modal: form.modal || "",
@@ -85,11 +74,8 @@ export default function MatrizOD() {
       });
       sucesso("Referência de mercado salva.");
       setForm(VAZIO);
-      carregar();
     } catch (e) {
       erroToast(extrairErro(e));
-    } finally {
-      setSalvando(false);
     }
   };
 
@@ -103,9 +89,8 @@ export default function MatrizOD() {
 
   const remover = async (id) => {
     try {
-      await mercadoApi.remover(id);
+      await removerMut.mutateAsync(id);
       sucesso("Linha removida.");
-      carregar();
     } catch (e) {
       erroToast(extrairErro(e));
     }
@@ -123,8 +108,8 @@ export default function MatrizOD() {
   return (
     <Box>
       <PageHeader
-        titulo="Matriz OD — Mercado"
-        subtitulo="Benchmark Logístico › Referência de mercado por Origem → Destino (source of truth)"
+        titulo="Matriz Benchmark (OD)"
+        subtitulo="Inteligência de Mercado › Referência de mercado por Origem → Destino (source of truth)"
       />
 
       <Alert severity="info" icon={<GridOnIcon />} sx={{ mb: 2.5 }}>

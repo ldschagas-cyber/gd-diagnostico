@@ -8,10 +8,13 @@ from datetime import date
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy.orm import Session
 
 from app.application.use_cases.benchmark import BenchmarkUseCase
+from app.application.use_cases.benchmark_dashboard import BenchmarkDashboardUseCase
 from app.application.use_cases.benchmark_od import BenchmarkODUseCase
 from app.application.use_cases.diagnostico import DiagnosticoUseCase
+from app.core.database import get_db
 from app.presentation.api.dependencies import (
     get_benchmark_corredor_repo,
     get_benchmark_repo,
@@ -39,11 +42,11 @@ router = APIRouter(prefix="/benchmark", tags=["Benchmark — Análise"])
 
 def _build_uc(
     cte_repo, empresa_repo, transp_repo, meta_nac, meta_reg, bench_repo,
-    cluster_repo, corredor_repo, hub_repo,
+    cluster_repo, corredor_repo, hub_repo, db,
 ) -> BenchmarkUseCase:
     diag = DiagnosticoUseCase(cte_repo, empresa_repo, transp_repo, meta_nac, meta_reg)
     od = BenchmarkODUseCase(cte_repo, cluster_repo, corredor_repo, hub_repo)
-    return BenchmarkUseCase(diag, cte_repo, bench_repo, benchmark_od_uc=od)
+    return BenchmarkUseCase(diag, cte_repo, bench_repo, benchmark_od_uc=od, db=db)
 
 
 def _deps(
@@ -56,10 +59,11 @@ def _deps(
     cluster_repo=Depends(get_cluster_repo),
     corredor_repo=Depends(get_benchmark_corredor_repo),
     hub_repo=Depends(get_hub_repo),
+    db: Session = Depends(get_db),
 ):
     return _build_uc(
         cte_repo, empresa_repo, transp_repo, meta_nac, meta_reg, bench_repo,
-        cluster_repo, corredor_repo, hub_repo,
+        cluster_repo, corredor_repo, hub_repo, db,
     )
 
 
@@ -70,6 +74,13 @@ def _deps_od(
     hub_repo=Depends(get_hub_repo),
 ) -> BenchmarkODUseCase:
     return BenchmarkODUseCase(cte_repo, cluster_repo, corredor_repo, hub_repo)
+
+
+def _deps_dashboard(
+    cte_repo=Depends(get_cte_repo),
+    db: Session = Depends(get_db),
+) -> BenchmarkDashboardUseCase:
+    return BenchmarkDashboardUseCase(db, cte_repo)
 
 
 @router.get("/nacional/{empresa_id}", response_model=BenchmarkNacionalOut)
@@ -166,3 +177,50 @@ def benchmark_corredores(
     resultado = od.resultado(empresa_id, data_inicio, data_fim)
     resultado.empresa_nome = empresa.nome_fantasia or empresa.razao_social
     return resultado
+
+
+# ═══════════ Telas novas (v6.9 — Fase 1): Comparativo, Simulador, Indicadores ═══════════
+
+@router.get("/comparativo-mercado/{empresa_id}")
+def comparativo_mercado(
+    empresa_id: int,
+    escopo: str = Query("NACIONAL", pattern="^(NACIONAL|REGIAO|CORREDOR)$"),
+    data_inicio: Optional[date] = Query(None),
+    data_fim: Optional[date] = Query(None),
+    _=Depends(verificar_acesso_empresa),
+    uc: BenchmarkDashboardUseCase = Depends(_deps_dashboard),
+):
+    """Comparativo Cliente × Mercado (P10-P90) — Inteligência de Mercado
+    (Matriz Benchmark OD) é a única fonte de referência lida aqui."""
+    return uc.comparativo_mercado(empresa_id, escopo, data_inicio, data_fim)
+
+
+@router.get("/simulador-economia/{empresa_id}")
+def simulador_economia(
+    empresa_id: int,
+    cenario: str = Query("P50", pattern="^(P50|P25|P10)$"),
+    data_inicio: Optional[date] = Query(None),
+    data_fim: Optional[date] = Query(None),
+    _=Depends(verificar_acesso_empresa),
+    uc: BenchmarkDashboardUseCase = Depends(_deps_dashboard),
+):
+    """Simulador 'e se atingíssemos P50/P25/P10' — economia projetada por
+    região, corredor e transportadora."""
+    return uc.simulador_economia(empresa_id, cenario, data_inicio, data_fim)
+
+
+@router.get("/indicadores-mercado/{empresa_id}")
+def indicadores_mercado(
+    empresa_id: int,
+    data_inicio: Optional[date] = Query(None),
+    data_fim: Optional[date] = Query(None),
+    _=Depends(verificar_acesso_empresa),
+    uc: BenchmarkDashboardUseCase = Depends(_deps_dashboard),
+):
+    """Indicadores transversais (seção 9): Índice de Confiabilidade e
+    Cobertura do Benchmark — reutilizáveis em qualquer tela que consuma a
+    Matriz Benchmark (OD)."""
+    return {
+        "confiabilidade": uc.confiabilidade(empresa_id, data_inicio, data_fim),
+        "cobertura": uc.cobertura(empresa_id, data_inicio, data_fim),
+    }

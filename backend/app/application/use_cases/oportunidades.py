@@ -20,8 +20,9 @@ from sqlalchemy.orm import Session
 from app.domain.entities import CTE_STATUS_ATIVO
 from app.infrastructure.database.models import (
     OportunidadeModel, PlanoAcaoModel, CTeModel,
-    TransportadoraModel, BenchmarkModel,
+    TransportadoraModel,
 )
+from app.application.use_cases.benchmark_v2 import mapa_medio_por_regiao_destino
 
 logger = logging.getLogger(__name__)
 
@@ -63,7 +64,7 @@ class OportunidadesUseCase:
             .group_by(CTeModel.macro_regiao_destino)
             .all()
         )
-        bench = {b.regiao: b.frete_kg_medio for b in self.db.query(BenchmarkModel).all()}
+        bench = mapa_medio_por_regiao_destino(self.db)
         count = 0
         for regiao, frete, peso in regioes:
             bk = bench.get(regiao)
@@ -174,7 +175,7 @@ class OportunidadesUseCase:
             .order_by(func.sum(CTeModel.peso).desc())
             .all()
         )
-        bench = {b.regiao: b.frete_kg_medio for b in self.db.query(BenchmarkModel).all()}
+        bench = mapa_medio_por_regiao_destino(self.db)
         count = 0
         for regiao, frete, peso in regioes[:2]:  # top 2 regiões por volume
             bk = bench.get(regiao)

@@ -4,9 +4,11 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
+from sqlalchemy.orm import Session
 
 from app.application.use_cases.benchmark import BenchmarkUseCase
 from app.application.use_cases.diagnostico import DiagnosticoUseCase
+from app.core.database import get_db
 from app.infrastructure.reports.benchmark_report import (
     gerar_benchmark_excel,
     gerar_benchmark_pdf,
@@ -87,9 +89,9 @@ def relatorio_pdf(
 
 
 # ==================== Relatórios de Benchmark (seção 14) ====================
-def _benchmark_uc(cte_repo, empresa_repo, transp_repo, meta_nac, meta_reg, bench_repo):
+def _benchmark_uc(cte_repo, empresa_repo, transp_repo, meta_nac, meta_reg, bench_repo, db):
     diag = DiagnosticoUseCase(cte_repo, empresa_repo, transp_repo, meta_nac, meta_reg)
-    return BenchmarkUseCase(diag, cte_repo, bench_repo)
+    return BenchmarkUseCase(diag, cte_repo, bench_repo, db=db)
 
 
 def _dados_benchmark(uc, empresa_repo, empresa_id, data_inicio, data_fim):
@@ -117,8 +119,9 @@ def relatorio_benchmark_excel(
     meta_nac=Depends(get_meta_nacional_repo),
     meta_reg=Depends(get_meta_regional_repo),
     bench_repo=Depends(get_benchmark_repo),
+    db: Session = Depends(get_db),
 ):
-    uc = _benchmark_uc(cte_repo, empresa_repo, transp_repo, meta_nac, meta_reg, bench_repo)
+    uc = _benchmark_uc(cte_repo, empresa_repo, transp_repo, meta_nac, meta_reg, bench_repo, db)
     nome, nacional, regional, transps, economia = _dados_benchmark(
         uc, empresa_repo, empresa_id, data_inicio, data_fim
     )
@@ -143,8 +146,9 @@ def relatorio_benchmark_pdf(
     meta_nac=Depends(get_meta_nacional_repo),
     meta_reg=Depends(get_meta_regional_repo),
     bench_repo=Depends(get_benchmark_repo),
+    db: Session = Depends(get_db),
 ):
-    uc = _benchmark_uc(cte_repo, empresa_repo, transp_repo, meta_nac, meta_reg, bench_repo)
+    uc = _benchmark_uc(cte_repo, empresa_repo, transp_repo, meta_nac, meta_reg, bench_repo, db)
     nome, nacional, regional, transps, economia = _dados_benchmark(
         uc, empresa_repo, empresa_id, data_inicio, data_fim
     )

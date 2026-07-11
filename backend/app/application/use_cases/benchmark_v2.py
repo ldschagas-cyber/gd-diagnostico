@@ -55,6 +55,68 @@ def _pct(valor: float, base: float) -> float:
     return round((valor - base) / base * 100, 2) if base else 0.0
 
 
+# ─────────────────────────────────────────────────────────────────────────
+# Consolidação SSoT (v6.9 — Fase 1 da refatoração do Benchmark Logístico):
+# a Matriz Benchmark (OD) / benchmark_mercado passa a ser a única fonte de
+# referência de mercado em R$/kg lida pelos demais módulos (Diagnóstico,
+# Benchmark Logístico, Score, Insights, Oportunidades, Assistente IA).
+# Estas funções substituem as leituras diretas do antigo `BenchmarkModel`
+# (V1, tabela `benchmarks`) por região.
+#
+# Limitação conhecida: `benchmark_mercado` só modela R$/kg (percentis
+# P10-P90). O antigo V1 também trazia uma faixa de % Frete/Mercadoria
+# (frete_pct_min/medio/max), que não tem equivalente no schema V2 — os
+# consumidores de %Frete continuam usando a classificação por faixa fixa
+# (RN-14), sem um "benchmark de %" numérico. Ver relatório de Fase 1.
+# ─────────────────────────────────────────────────────────────────────────
+_PERCENTIS = ("p10", "p25", "p50", "p75", "p90")
+
+
+def mapa_percentis_mercado(db: Session) -> dict[str, dict[str, float]]:
+    """Percentis de referência (P10-P90) em R$/kg por macrorregião de
+    destino, agregando todos os pares OD da Matriz Benchmark (OD) que
+    terminam nessa região. Inclui a chave especial "NACIONAL" com a média
+    de todo o país. Cada entrada traz as chaves "p10".."p90" e os apelidos
+    "min"/"medio"/"max" (= p10/p50/p90), compatíveis com o antigo
+    ``Benchmark.frete_kg_min/medio/max`` (V1)."""
+    rows = db.execute(select(BenchmarkMercadoModel)).scalars().all()
+    grupos: dict[str, dict[str, list[float]]] = {}
+    todos = {p: [] for p in _PERCENTIS}
+    for r in rows:
+        if not r.rs_kg_p50:
+            continue
+        g = grupos.setdefault(r.destino_regiao, {p: [] for p in _PERCENTIS})
+        for p in _PERCENTIS:
+            valor = getattr(r, f"rs_kg_{p}")
+            g[p].append(valor)
+            todos[p].append(valor)
+
+    def _media(vals: list[float]) -> float:
+        return round(sum(vals) / len(vals), 4) if vals else 0.0
+
+    def _linha(v: dict[str, list[float]]) -> dict[str, float]:
+        linha = {p: _media(v[p]) for p in _PERCENTIS}
+        linha["min"], linha["medio"], linha["max"] = linha["p10"], linha["p50"], linha["p90"]
+        return linha
+
+    resultado = {regiao: _linha(v) for regiao, v in grupos.items()}
+    resultado["NACIONAL"] = _linha(todos)
+    return resultado
+
+
+def mapa_medio_por_regiao_destino(db: Session) -> dict[str, float]:
+    """Mapa macrorregião de destino → R$/kg de referência (P50 médio),
+    substituindo o antigo ``{b.regiao: b.frete_kg_medio for b in ...}`` (V1)
+    usado por Score Logístico, Insights, Oportunidades e Assistente IA."""
+    return {k: v["medio"] for k, v in mapa_percentis_mercado(db).items()}
+
+
+def media_nacional_rs_kg_p50(db: Session) -> float:
+    """Média nacional de R$/kg (P50) — substitui
+    ``func.avg(BenchmarkModel.frete_kg_medio)`` (V1)."""
+    return mapa_percentis_mercado(db).get("NACIONAL", {}).get("medio", 0.0)
+
+
 def destino_regiao_de_grupo(tipo_agrupamento: str, valor_grupo: str) -> Optional[str]:
     """Mapeia um grupo do escopo do BID para a macrorregião de destino, quando
     possível. REGIAO já é a região; UF é convertida; demais agrupamentos

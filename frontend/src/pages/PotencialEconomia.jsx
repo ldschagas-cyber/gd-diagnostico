@@ -1,16 +1,119 @@
-import { useEffect, useState, useCallback } from "react";
 import {
   Box, Grid, Card, CardContent, Typography, Stack, TextField, Button,
   Table, TableHead, TableRow, TableCell, TableBody, LinearProgress, Alert, Divider,
+  ToggleButtonGroup, ToggleButton,
 } from "@mui/material";
 import SavingsIcon from "@mui/icons-material/Savings";
+import TuneIcon from "@mui/icons-material/Tune";
 import PageHeader from "../components/PageHeader";
 import { VazioEstado } from "../components/Tabela";
 import { useEmpresa } from "../contexts/EmpresaContext";
-import { benchmarkApi } from "../api/endpoints";
+import { useBenchmarkEconomia, useSimuladorEconomia, useTransportadoras } from "../api/queries";
+import { useTelaEstado } from "../hooks/useTelaEstado";
 import { extrairErro } from "../api/client";
 import { fmtMoeda, fmtNumero, fmtPct, fmtRsKg, rotuloMacro } from "../utils/format";
 import { GD } from "../theme";
+
+const CENARIOS = [
+  { valor: "P10", rotulo: "Cenário P10", ajuda: "atingir os 10% mais baratos do mercado" },
+  { valor: "P25", rotulo: "Cenário P25", ajuda: "atingir o quartil mais competitivo" },
+  { valor: "P50", rotulo: "Cenário P50", ajuda: "atingir a mediana de mercado" },
+];
+
+function SimuladorEconomia({ empresaAtivaId, dataInicio, dataFim, cenario, setCenario }) {
+  const { data: transportadoras = [] } = useTransportadoras(empresaAtivaId);
+
+  const params = { cenario };
+  if (dataInicio) params.data_inicio = dataInicio;
+  if (dataFim) params.data_fim = dataFim;
+  const { data: sim, isFetching: carregando } = useSimuladorEconomia(empresaAtivaId, params);
+
+  const nomeTransp = (id) => transportadoras.find((t) => t.id === id)?.nome_fantasia
+    || transportadoras.find((t) => t.id === id)?.razao_social || `Transportadora #${id}`;
+
+  const cenarioAtual = CENARIOS.find((c) => c.valor === cenario);
+
+  return (
+    <Card sx={{ mt: 3 }}>
+      <CardContent>
+        <Stack direction={{ xs: "column", sm: "row" }} justifyContent="space-between" alignItems={{ sm: "center" }} spacing={1.5} sx={{ mb: 2 }}>
+          <Stack direction="row" spacing={1} alignItems="center">
+            <TuneIcon sx={{ color: GD.indigo }} />
+            <Typography variant="h6">Simulador — "e se atingíssemos..."</Typography>
+          </Stack>
+          <ToggleButtonGroup exclusive value={cenario} onChange={(_, v) => v && setCenario(v)} size="small">
+            {CENARIOS.map((c) => <ToggleButton key={c.valor} value={c.valor}>{c.rotulo}</ToggleButton>)}
+          </ToggleButtonGroup>
+        </Stack>
+
+        {carregando && <LinearProgress sx={{ mb: 2 }} />}
+
+        {sim && (
+          <>
+            <Alert severity="info" sx={{ mb: 2.5 }}>
+              Se todos os corredores passassem a pagar o {cenarioAtual?.ajuda}, a economia
+              projetada no período seria de <strong>{fmtMoeda(sim.economia_total)}</strong>.
+            </Alert>
+
+            <Grid container spacing={2.5}>
+              <Grid item xs={12} md={4}>
+                <Typography variant="subtitle2" sx={{ mb: 1 }}>Por região</Typography>
+                {!sim.por_regiao.length ? (
+                  <Typography variant="body2" color="text.secondary">Sem economia projetada.</Typography>
+                ) : (
+                  <Table size="small">
+                    <TableBody>
+                      {sim.por_regiao.map((r) => (
+                        <TableRow key={r.destino_regiao}>
+                          <TableCell>{rotuloMacro(r.destino_regiao)}</TableCell>
+                          <TableCell align="right" sx={{ fontWeight: 600 }}>{fmtMoeda(r.economia)}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                )}
+              </Grid>
+              <Grid item xs={12} md={4}>
+                <Typography variant="subtitle2" sx={{ mb: 1 }}>Por corredor (top 5)</Typography>
+                {!sim.por_corredor.length ? (
+                  <Typography variant="body2" color="text.secondary">Sem economia projetada.</Typography>
+                ) : (
+                  <Table size="small">
+                    <TableBody>
+                      {sim.por_corredor.slice(0, 5).map((c, i) => (
+                        <TableRow key={i}>
+                          <TableCell>{rotuloMacro(c.origem_regiao)} → {rotuloMacro(c.destino_regiao)}</TableCell>
+                          <TableCell align="right" sx={{ fontWeight: 600 }}>{fmtMoeda(c.economia)}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                )}
+              </Grid>
+              <Grid item xs={12} md={4}>
+                <Typography variant="subtitle2" sx={{ mb: 1 }}>Por transportadora (top 5)</Typography>
+                {!sim.por_transportadora.length ? (
+                  <Typography variant="body2" color="text.secondary">Sem economia projetada.</Typography>
+                ) : (
+                  <Table size="small">
+                    <TableBody>
+                      {sim.por_transportadora.slice(0, 5).map((t) => (
+                        <TableRow key={t.transportadora_id}>
+                          <TableCell>{nomeTransp(t.transportadora_id)}</TableCell>
+                          <TableCell align="right" sx={{ fontWeight: 600 }}>{fmtMoeda(t.economia)}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                )}
+              </Grid>
+            </Grid>
+          </>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
 
 function CardProjecao({ titulo, valor, destaque }) {
   return (
@@ -27,32 +130,19 @@ function CardProjecao({ titulo, valor, destaque }) {
 
 export default function PotencialEconomia() {
   const { empresaAtiva, empresaAtivaId } = useEmpresa();
-  const [dados, setDados] = useState(null);
-  const [carregando, setCarregando] = useState(false);
-  const [erro, setErro] = useState("");
-  const [dataInicio, setDataInicio] = useState("");
-  const [dataFim, setDataFim] = useState("");
+  const [tela, , patch] = useTelaEstado("benchmark-economia", {
+    dataInicio: "", dataFim: "", cenario: "P50",
+  });
+  const { dataInicio, dataFim, cenario } = tela;
+  const setDataInicio = (v) => patch({ dataInicio: v });
+  const setDataFim = (v) => patch({ dataFim: v });
+  const setCenario = (v) => patch({ cenario: v });
 
-  const carregar = useCallback(async () => {
-    if (!empresaAtivaId) return;
-    setCarregando(true);
-    setErro("");
-    try {
-      const params = {};
-      if (dataInicio) params.data_inicio = dataInicio;
-      if (dataFim) params.data_fim = dataFim;
-      setDados(await benchmarkApi.economia(empresaAtivaId, params));
-    } catch (e) {
-      setErro(extrairErro(e));
-      setDados(null);
-    } finally {
-      setCarregando(false);
-    }
-  }, [empresaAtivaId, dataInicio, dataFim]);
-
-  useEffect(() => {
-    carregar();
-  }, [empresaAtivaId]); // eslint-disable-line react-hooks/exhaustive-deps
+  const params = {};
+  if (dataInicio) params.data_inicio = dataInicio;
+  if (dataFim) params.data_fim = dataFim;
+  const { data: dados, isFetching: carregando, error, refetch } = useBenchmarkEconomia(empresaAtivaId, params);
+  const erro = error ? extrairErro(error) : "";
 
   if (!empresaAtivaId) {
     return (
@@ -74,7 +164,7 @@ export default function PotencialEconomia() {
               onChange={(e) => setDataInicio(e.target.value)} InputLabelProps={{ shrink: true }} sx={{ width: 150 }} />
             <TextField label="Até" type="date" size="small" value={dataFim}
               onChange={(e) => setDataFim(e.target.value)} InputLabelProps={{ shrink: true }} sx={{ width: 150 }} />
-            <Button variant="contained" onClick={carregar} disabled={carregando}>Aplicar</Button>
+            <Button variant="contained" onClick={() => refetch()} disabled={carregando}>Aplicar</Button>
           </Stack>
         }
       />
@@ -170,6 +260,11 @@ export default function PotencialEconomia() {
               </Typography>
             </CardContent>
           </Card>
+
+          <SimuladorEconomia
+            empresaAtivaId={empresaAtivaId} dataInicio={dataInicio} dataFim={dataFim}
+            cenario={cenario} setCenario={setCenario}
+          />
         </>
       )}
     </Box>

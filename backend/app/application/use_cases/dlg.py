@@ -10,7 +10,8 @@ Responsabilidades:
 Fonte de dados:
 - IMP → CTeModel (CT-e normalizados)
 - CAD → TransportadoraModel (nomes)
-- CFG → MetaNacionalModel / MetaRegionalModel / BenchmarkModel (referências)
+- CFG → MetaNacionalModel / MetaRegionalModel / BenchmarkMercadoModel (referências,
+  via Matriz Benchmark OD — fonte única de mercado, v6.9)
 """
 from __future__ import annotations
 
@@ -33,7 +34,6 @@ from app.domain.entities import (
     calc_ranking_componentes,
 )
 from app.infrastructure.database.models import (
-    BenchmarkModel,
     BenchmarkMercadoModel,
     CTeModel,
     DlgAnaliticoModel,
@@ -298,11 +298,8 @@ class DlgUseCase:
             (m.macro_regiao.value if hasattr(m.macro_regiao, "value") else m.macro_regiao): m
             for m in self.db.scalars(select(MetaRegionalModel)).all()
         }
-        benchmarks = {
-            b.regiao: b
-            for b in self.db.scalars(select(BenchmarkModel)).all()
-        }
-        # benchmark_mercado: p50 por região de destino
+        # benchmark_mercado (Matriz Benchmark OD): p50 por região de destino —
+        # fonte única de mercado (v6.9); substitui o antigo dict de BenchmarkModel (V1).
         mercado = defaultdict(list)
         for bm in self.db.scalars(select(BenchmarkMercadoModel)).all():
             mercado[bm.destino_regiao].append(bm.rs_kg_p50)
@@ -311,7 +308,6 @@ class DlgUseCase:
         return {
             "meta_nac": meta_nac,
             "metas_reg": metas_reg,
-            "benchmarks": benchmarks,
             "mercado_p50": mercado_p50,
         }
 

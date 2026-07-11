@@ -126,6 +126,20 @@ Correção adicional: `PUT /usuarios/{id}` sem o campo `senha` não zera mais o 
 
 **Testes**: novo `backend/tests/test_v670_dimensao_cliente.py` (23 testes) — RN-68 (dedup), RN-72/73/74 (composição/parser/ranking), RN-75 (fragmentação, limite exato de janela), RN-76 (diagnóstico causal, 4 combinações), RN-77 (recomendação causal), ferramenta de IA, extração de destinatário do XML, backfill de destinatário/composição (DT-27, incluindo isolamento multi-tenant e idempotência), e regressão das 4 dimensões existentes.
 
+## [6.7.1] — Reagrupamento visual do menu Benchmark Logístico
+
+Os 8 itens do menu "Benchmark Logístico" (`frontend/src/layouts/AppLayout.jsx`) estavam em lista plana, misturando três lógicas diferentes no mesmo nível (escopo geográfico, base de comparação, ação/resultado). Reorganizados em 4 subseções visuais, do mais amplo ao mais específico: **Visão geral** (Dashboard Executivo), **Escala geográfica** (Nacional, Regional, Corredores OD), **Comparação de mercado** (Matriz OD/Mercado, Benchmark/MBL) e **Ação e resultado** (Transportadoras, Potencial de Economia).
+
+**Mudança técnica**: config do grupo (array `GRUPOS`) ganha campo opcional `subgrupos` (lista de `{ titulo, itens }`) como alternativa ao `itens` plano já existente; usado apenas pelo grupo Benchmark Logístico, sem alterar a forma dos demais 7 grupos do menu. Cada subgrupo renderiza um rótulo não-clicável (mesmo estilo visual do cabeçalho do grupo — maiúsculas, cinza, letter-spacing — porém sem `onClick`/collapse próprio); o `Collapse` único do grupo é preservado.
+
+**Sem mudança de comportamento**: ícones, rotas e a lógica de destaque do item ativo (`isAtivo`) preservados exatamente como estavam; nenhum item removido, criado ou renomeado; nenhuma rota, contrato de API, cálculo ou dado alterado. PATCH puro de navegação/IA.
+
+## [6.7.2] — Ajustes de legibilidade na tela Benchmark Nacional
+
+Seis ajustes de UI em `frontend/src/pages/BenchmarkNacional.jsx` e `frontend/src/components/BenchmarkComparacao.jsx`, sem alteração de cálculo, regra de negócio, API ou dado: (1) subtítulo fixo "Comparativo da operação com o mercado brasileiro", no lugar do nome da empresa concatenado; (2) rótulos dos 4 cards com unidade explícita ("Frete Total (R$)", "Mercadoria (R$)", "Peso Transportado (kg)", "Custo Médio (R$/kg)"); (3) rótulos "mín/médio/máx" trocados por "Mercado: Mínimo/Média/Máximo" nos blocos de comparação; (4) confirmado que a classificação (Excelente/Bom/Atenção/Crítico) já era exibida como selo colorido (`Chip`) — nenhuma mudança necessária; (5) desvio percentual passa de formato compacto com sinal (ex.: "-16,5%") para rótulo por extenso (ex.: "16,5% abaixo da média nacional"), em função local `rotuloDesvio` — os utilitários compartilhados `fmtDesvio`/`corDesvio` (usados em colunas de tabela de Regional/Corredores/Transportadoras/BID) não foram alterados; (6) texto extenso de critério de classificação no rodapé substituído por botão "ⓘ Critérios de classificação" que abre modal (`Dialog`) com o mesmo conteúdo.
+
+**Sem regressão**: `BenchmarkComparacao` é usado exclusivamente por esta tela — nenhuma outra página do Benchmark foi afetada pela mudança de rótulos.
+
 ---
 
 ## Nota sobre nomenclatura de versão

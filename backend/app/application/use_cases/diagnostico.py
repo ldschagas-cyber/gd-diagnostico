@@ -140,7 +140,15 @@ class DiagnosticoUseCase:
     def _referencia_mercado_pct(self, ind: IndicadorNacional) -> None:
         """Preenche a faixa de mercado do % Frete/Mercadoria a partir dos
         benchmarks cadastrados (MELHORIA 6). Silencioso quando não há benchmark
-        ou repositório disponível."""
+        ou repositório disponível.
+
+        Nota (v6.9, consolidação SSoT): continua lendo o benchmark V1 legado
+        (``self.benchmark_repo``), não a Matriz Benchmark (OD). O schema da
+        Matriz Benchmark (OD) (``benchmark_mercado``) só modela R$/kg —
+        não há campo de % Frete/Mercadoria migrável. Migrar este indicador
+        exigiria estender o schema da Matriz Benchmark (OD), o que é uma
+        decisão de produto/schema fora do escopo desta fase (ver relatório
+        de Fase 1 — pontos pendentes)."""
         if not self.benchmark_repo:
             return
         try:

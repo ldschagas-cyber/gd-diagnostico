@@ -19,8 +19,9 @@ from sqlalchemy.orm import Session
 from app.domain.entities import CTE_STATUS_ATIVO
 from app.infrastructure.database.models import (
     InsightModel, InsightExecucaoModel, RegraInsightModel,
-    CTeModel, TransportadoraModel, BenchmarkModel,
+    CTeModel, TransportadoraModel,
 )
+from app.application.use_cases.benchmark_v2 import mapa_medio_por_regiao_destino
 
 logger = logging.getLogger(__name__)
 
@@ -132,7 +133,7 @@ class InsightsUseCase:
             .group_by(CTeModel.macro_regiao_destino)
             .all()
         )
-        bench = {b.regiao: b.frete_kg_medio for b in self.db.query(BenchmarkModel).all()}
+        bench = mapa_medio_por_regiao_destino(self.db)
         metricas["regioes"] = []
         for regiao, frete, peso in regioes:
             if not regiao or not peso:

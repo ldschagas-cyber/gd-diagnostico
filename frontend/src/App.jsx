@@ -17,18 +17,16 @@ import ImportacaoCte from "./pages/ImportacaoCte";
 import ImportacaoExcel from "./pages/ImportacaoExcel";
 import Relatorios from "./pages/Relatorios";
 import Usuarios from "./pages/Usuarios";
-import BenchmarkCorredores from "./pages/BenchmarkCorredores";
 import MatrizOD from "./pages/MatrizOD";
 import DiagnosticoDLG from "./pages/DiagnosticoDLG";
 import Recomendacoes from "./pages/Recomendacoes";
 import BenchmarkMBL from "./pages/BenchmarkMBL";
 import ConcorrenciaMCL from "./pages/ConcorrenciaMCL";
-import BenchmarkNacional from "./pages/BenchmarkNacional";
-import BenchmarkRegional from "./pages/BenchmarkRegional";
-import BenchmarkTransportadoras from "./pages/BenchmarkTransportadoras";
+import BenchmarkDiagnostico from "./pages/BenchmarkDiagnostico";
+import BenchmarkComparativoMercado from "./pages/BenchmarkComparativoMercado";
 import PotencialEconomia from "./pages/PotencialEconomia";
 import DashboardExecutivo from "./pages/DashboardExecutivo";
-import Clusters from "./pages/Clusters";
+import HubsLogisticos from "./pages/HubsLogisticos";
 import BenchmarksCorredor from "./pages/BenchmarksCorredor";
 // Módulo Concorrência Logística (V3.1)
 import BidDashboard from "./pages/BidDashboard";
@@ -73,19 +71,27 @@ export default function App() {
                 <Route path="/" element={<Dashboard />} />
                 <Route path="/relatorios" element={<Relatorios />} />
 
-                {/* ── Benchmark ── */}
+                {/* ── Benchmark Logístico (v6.9 — módulo exclusivamente analítico) ── */}
                 <Route path="/benchmark/executivo" element={<DashboardExecutivo />} />
-                <Route path="/benchmark/corredores" element={<BenchmarkCorredores />} />
-                <Route path="/benchmark/matriz-od" element={<MatrizOD />} />
-                <Route path="/benchmark/mbl" element={<BenchmarkMBL />} />
+                <Route path="/benchmark/diagnostico" element={<BenchmarkDiagnostico />} />
+                <Route path="/benchmark/comparativo-mercado" element={<BenchmarkComparativoMercado />} />
+                <Route path="/benchmark/economia" element={<PotencialEconomia />} />
                 <Route path="/diagnostico/dlg" element={<DiagnosticoDLG />} />
                 <Route path="/diagnostico/recomendacoes" element={<Recomendacoes />} />
                 <Route path="/bid/decisao" element={<ConcorrenciaMCL />} />
-                <Route path="/benchmark/nacional" element={<BenchmarkNacional />} />
-                <Route path="/benchmark/regional" element={<BenchmarkRegional />} />
-                <Route path="/benchmark/transportadoras" element={<BenchmarkTransportadoras />} />
-                <Route path="/benchmark/economia" element={<PotencialEconomia />} />
-                <Route path="/benchmark/clusters" element={<Clusters />} />
+                <Route path="/bid/mbl" element={<BenchmarkMBL />} />
+
+                {/* ── Inteligência de Mercado ── */}
+                <Route path="/inteligencia-mercado/matriz-od" element={<MatrizOD />} />
+
+                {/* ── Rotas antigas (compatibilidade com links/favoritos salvos) ── */}
+                <Route path="/benchmark/matriz-od" element={<Navigate to="/inteligencia-mercado/matriz-od" replace />} />
+                <Route path="/benchmark/clusters" element={<Navigate to="/configuracoes/hubs-logisticos" replace />} />
+                <Route path="/benchmark/nacional" element={<Navigate to="/benchmark/diagnostico" replace />} />
+                <Route path="/benchmark/regional" element={<Navigate to="/benchmark/diagnostico" replace />} />
+                <Route path="/benchmark/corredores" element={<Navigate to="/benchmark/diagnostico" replace />} />
+                <Route path="/benchmark/transportadoras" element={<Navigate to="/benchmark/executivo" replace />} />
+                <Route path="/benchmark/mbl" element={<Navigate to="/bid/mbl" replace />} />
 
                 {/* ── Importação ── */}
                 <Route path="/importar/cte" element={<ImportacaoCte />} />
@@ -122,6 +128,7 @@ export default function App() {
                 <Route path="/regioes" element={<Regioes />} />
                 <Route path="/cidades" element={<Cidades />} />
                 <Route path="/metas" element={<Metas />} />
+                <Route path="/configuracoes/hubs-logisticos" element={<HubsLogisticos />} />
 
                 <Route
                   path="/configuracoes/corredores"

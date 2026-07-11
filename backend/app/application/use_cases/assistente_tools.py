@@ -11,9 +11,10 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.infrastructure.database.models import (
-    CTeModel, TransportadoraModel, BenchmarkModel, FilialModel,
+    CTeModel, TransportadoraModel, FilialModel,
 )
 from app.application.use_cases.score_logistico import ScoreLogisticoUseCase
+from app.application.use_cases.benchmark_v2 import mapa_medio_por_regiao_destino
 
 
 # ─────────── Definições das ferramentas (schema para o LLM) ───────────
@@ -146,7 +147,7 @@ class FerramentasLogisticas:
         )
         if not regioes:
             return {"mensagem": "Sem dados de regiões."}
-        bench = {b.regiao: b.frete_kg_medio for b in self.db.query(BenchmarkModel).all()}
+        bench = mapa_medio_por_regiao_destino(self.db)
         mais_cara = max(regioes, key=lambda r: r[1] or 0)
         benchmark = bench.get(mais_cara[0], 0)
         return {

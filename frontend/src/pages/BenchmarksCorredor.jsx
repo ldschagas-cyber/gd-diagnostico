@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useState, useCallback } from "react";
 import {
   Box, Card, CardContent, Typography, Stack, TextField, Button,
   Table, TableHead, TableRow, TableCell, TableBody, MenuItem, IconButton,
@@ -8,7 +8,7 @@ import DeleteIcon from "@mui/icons-material/Delete";
 import RouteIcon from "@mui/icons-material/Route";
 import PageHeader from "../components/PageHeader";
 import { useFeedback } from "../components/Feedback";
-import { corredoresApi, hubsApi } from "../api/endpoints";
+import { useHubs, useCorredoresRef, useMutacoesCorredorRef } from "../api/queries";
 import { extrairErro } from "../api/client";
 
 const VAZIO = {
@@ -20,42 +20,27 @@ const VAZIO = {
 
 export default function BenchmarksCorredor() {
   const { sucesso, erro: erroToast } = useFeedback();
-  const [hubs, setHubs] = useState([]);
-  const [lista, setLista] = useState([]);
-  const [carregando, setCarregando] = useState(false);
-  const [salvando, setSalvando] = useState(false);
+  const { data: hubs = [] } = useHubs(true);
+  const { data: lista = [], isLoading: carregando, error } = useCorredoresRef();
+  const { salvar: salvarMut, remover: removerMut } = useMutacoesCorredorRef();
   const [form, setForm] = useState(VAZIO);
+
+  if (error) erroToast(extrairErro(error));
 
   const nomeHub = useCallback(
     (cod) => hubs.find((h) => h.codigo === cod)?.nome || cod,
     [hubs]
   );
 
-  const carregar = useCallback(async () => {
-    setCarregando(true);
-    try {
-      const [h, c] = await Promise.all([hubsApi.listar(true), corredoresApi.listar()]);
-      setHubs(h);
-      setLista(c);
-    } catch (e) {
-      erroToast(extrairErro(e));
-    } finally {
-      setCarregando(false);
-    }
-  }, [erroToast]);
-
-  useEffect(() => {
-    carregar();
-  }, [carregar]);
-
   const set = (campo, valor) => setForm((p) => ({ ...p, [campo]: valor }));
+
+  const salvando = salvarMut.isPending;
 
   const salvar = async () => {
     if (!form.hub_origem_codigo || !form.hub_destino_codigo) {
       erroToast("Selecione o hub de origem e o de destino.");
       return;
     }
-    setSalvando(true);
     try {
       const payload = {
         ...form,
@@ -68,14 +53,11 @@ export default function BenchmarksCorredor() {
         volume_referencia: Number(form.volume_referencia) || 0,
         dispersao_kg: Number(form.dispersao_kg) || 0,
       };
-      await corredoresApi.salvar(payload);
+      await salvarMut.mutateAsync(payload);
       sucesso("Referência de corredor salva.");
       setForm(VAZIO);
-      carregar();
     } catch (e) {
       erroToast(extrairErro(e));
-    } finally {
-      setSalvando(false);
     }
   };
 
@@ -83,9 +65,8 @@ export default function BenchmarksCorredor() {
 
   const remover = async (id) => {
     try {
-      await corredoresApi.remover(id);
+      await removerMut.mutateAsync(id);
       sucesso("Referência removida.");
-      carregar();
     } catch (e) {
       erroToast(extrairErro(e));
     }

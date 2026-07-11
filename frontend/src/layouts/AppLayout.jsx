@@ -12,7 +12,6 @@ import BusinessIcon        from "@mui/icons-material/Business";
 import LocalShippingIcon   from "@mui/icons-material/LocalShipping";
 import PublicIcon          from "@mui/icons-material/Public";
 import GavelIcon           from "@mui/icons-material/Gavel";
-import MapIcon             from "@mui/icons-material/Map";
 import InsightsIcon        from "@mui/icons-material/Insights";
 import SavingsIcon         from "@mui/icons-material/Savings";
 import ManageSearchIcon      from "@mui/icons-material/ManageSearch";
@@ -67,8 +66,8 @@ const GRUPOS = [
     titulo: "Configuração",
     itens: [
       { rotulo: "Metas",       icone: <FlagIcon />,  rota: "/metas" },
-      { rotulo: "Clusters do Cliente", icone: <HubIcon />, rota: "/benchmark/clusters" },
-      { rotulo: "Referências de Corredor", icone: <RouteIcon />, rota: "/configuracoes/corredores", soAdmin: true },
+      { rotulo: "Hubs Logísticos", icone: <HubIcon />, rota: "/configuracoes/hubs-logisticos" },
+      { rotulo: "Referência de Corredor (legado)", icone: <RouteIcon />, rota: "/configuracoes/corredores", soAdmin: true },
     ],
   },
   {
@@ -88,16 +87,18 @@ const GRUPOS = [
     ],
   },
   {
+    titulo: "Inteligência de Mercado",
+    itens: [
+      { rotulo: "Matriz Benchmark (OD)", icone: <GridOnIcon />, rota: "/inteligencia-mercado/matriz-od" },
+    ],
+  },
+  {
     titulo: "Benchmark Logístico",
     itens: [
-      { rotulo: "Dashboard Executivo",   icone: <InsightsIcon />,      rota: "/benchmark/executivo" },
-      { rotulo: "Corredores (OD)",       icone: <RouteIcon />,          rota: "/benchmark/corredores" },
-      { rotulo: "Matriz OD (Mercado)",   icone: <GridOnIcon />,          rota: "/benchmark/matriz-od" },
-      { rotulo: "Benchmark (MBL)",       icone: <StackedLineChartIcon />, rota: "/benchmark/mbl" },
-      { rotulo: "Nacional",              icone: <PublicIcon />,          rota: "/benchmark/nacional" },
-      { rotulo: "Regional",              icone: <MapIcon />,             rota: "/benchmark/regional" },
-      { rotulo: "Transportadoras",       icone: <LocalShippingIcon />,   rota: "/benchmark/transportadoras" },
-      { rotulo: "Potencial de Economia", icone: <SavingsIcon />,         rota: "/benchmark/economia" },
+      { rotulo: "Dashboard Executivo",    icone: <InsightsIcon />,          rota: "/benchmark/executivo" },
+      { rotulo: "Diagnóstico",            icone: <ManageSearchIcon />,      rota: "/benchmark/diagnostico" },
+      { rotulo: "Comparativo de Mercado", icone: <CompareArrowsIcon />,     rota: "/benchmark/comparativo-mercado" },
+      { rotulo: "Potencial de Economia",  icone: <SavingsIcon />,           rota: "/benchmark/economia" },
     ],
   },
   {
@@ -107,6 +108,7 @@ const GRUPOS = [
       { rotulo: "BIDs de Frete",  icone: <GavelIcon />,          rota: "/bid", exato: true },
       { rotulo: "Comparativo",    icone: <CompareArrowsIcon />,  rota: "/bid/comparativo" },
       { rotulo: "Motor de Decisão", icone: <GavelIcon />,         rota: "/bid/decisao" },
+      { rotulo: "Benchmark (MBL)", icone: <StackedLineChartIcon />, rota: "/bid/mbl" },
     ],
   },
   {
@@ -170,8 +172,61 @@ export default function AppLayout() {
       <Box sx={{ overflowY: "auto", flex: 1, py: 1 }}>
         {GRUPOS.map((grupo) => {
           if (grupo.soAdmin && !usuario?.is_superuser) return null;
-          const itens = grupo.itens.filter((i) => !i.soAdmin || usuario?.is_superuser);
-          if (!itens.length) return null;
+
+          const renderItem = (item) => {
+            const ativo = isAtivo(item);
+            return (
+              <ListItemButton
+                key={item.rotulo}
+                onClick={() => irPara(item.rota)}
+                onMouseEnter={() => prefetch(item.rota)}
+                sx={{
+                  mx: 1, borderRadius: 2,
+                  color: ativo ? GD.indigo : "rgba(255,255,255,0.82)",
+                  bgcolor: ativo ? GD.amber : "transparent",
+                  "&:hover": { bgcolor: ativo ? GD.amber : "rgba(255,255,255,0.08)" },
+                }}
+              >
+                <ListItemIcon sx={{ minWidth: 38, color: ativo ? GD.indigo : "rgba(255,255,255,0.7)" }}>
+                  {item.icone}
+                </ListItemIcon>
+                <ListItemText
+                  primary={item.rotulo}
+                  primaryTypographyProps={{ fontWeight: ativo ? 700 : 500, fontSize: 14 }}
+                />
+              </ListItemButton>
+            );
+          };
+
+          // Grupos com subgrupos (ex.: Benchmark Logístico) ganham cabeçalhos de
+          // subseção não-clicáveis entre os blocos de itens; o Collapse continua
+          // único, no nível do grupo, como nos demais grupos do menu.
+          let corpo;
+          if (grupo.subgrupos) {
+            const subgrupos = grupo.subgrupos
+              .map((sg) => ({ ...sg, itens: sg.itens.filter((i) => !i.soAdmin || usuario?.is_superuser) }))
+              .filter((sg) => sg.itens.length);
+            if (!subgrupos.length) return null;
+            corpo = subgrupos.map((sg) => (
+              <Box key={sg.titulo}>
+                <Typography
+                  sx={{
+                    px: 2.5, pt: 1, pb: 0.25,
+                    fontSize: 10, fontWeight: 700, letterSpacing: "0.08em",
+                    color: "rgba(255,255,255,0.30)",
+                  }}
+                >
+                  {sg.titulo.toUpperCase()}
+                </Typography>
+                <List dense disablePadding>{sg.itens.map(renderItem)}</List>
+              </Box>
+            ));
+          } else {
+            const itens = grupo.itens.filter((i) => !i.soAdmin || usuario?.is_superuser);
+            if (!itens.length) return null;
+            corpo = <List dense disablePadding>{itens.map(renderItem)}</List>;
+          }
+
           const estaAberto = expandido[grupo.titulo] !== false;
 
           return (
@@ -193,32 +248,7 @@ export default function AppLayout() {
               </ListItemButton>
 
               <Collapse in={estaAberto} timeout="auto" unmountOnExit>
-                <List dense disablePadding>
-                  {itens.map((item) => {
-                    const ativo = isAtivo(item);
-                    return (
-                      <ListItemButton
-                        key={item.rotulo}
-                        onClick={() => irPara(item.rota)}
-                        onMouseEnter={() => prefetch(item.rota)}
-                        sx={{
-                          mx: 1, borderRadius: 2,
-                          color: ativo ? GD.indigo : "rgba(255,255,255,0.82)",
-                          bgcolor: ativo ? GD.amber : "transparent",
-                          "&:hover": { bgcolor: ativo ? GD.amber : "rgba(255,255,255,0.08)" },
-                        }}
-                      >
-                        <ListItemIcon sx={{ minWidth: 38, color: ativo ? GD.indigo : "rgba(255,255,255,0.7)" }}>
-                          {item.icone}
-                        </ListItemIcon>
-                        <ListItemText
-                          primary={item.rotulo}
-                          primaryTypographyProps={{ fontWeight: ativo ? 700 : 500, fontSize: 14 }}
-                        />
-                      </ListItemButton>
-                    );
-                  })}
-                </List>
+                {corpo}
               </Collapse>
 
               <Divider sx={{ borderColor: "rgba(255,255,255,0.05)", mx: 2, my: 0.25 }} />

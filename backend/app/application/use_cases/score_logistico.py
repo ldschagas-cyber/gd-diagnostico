@@ -20,7 +20,11 @@ from sqlalchemy.orm import Session
 from app.domain.entities import CTE_STATUS_ATIVO
 from app.infrastructure.database.models import (
     ScoreLogisticoModel, ScoreHistoricoModel,
-    CTeModel, BenchmarkModel, TransportadoraModel, FilialModel,
+    CTeModel, TransportadoraModel, FilialModel,
+)
+from app.application.use_cases.benchmark_v2 import (
+    mapa_medio_por_regiao_destino,
+    media_nacional_rs_kg_p50,
 )
 
 logger = logging.getLogger(__name__)
@@ -91,9 +95,7 @@ class ScoreLogisticoUseCase:
         if not frete_kg:
             return 50.0  # neutro sem dados
 
-        bench_medio = (
-            self.db.query(func.avg(BenchmarkModel.frete_kg_medio)).scalar() or frete_kg
-        )
+        bench_medio = media_nacional_rs_kg_p50(self.db) or frete_kg
         # Quanto menor o frete vs benchmark, maior o score
         return self._score_por_razao(frete_kg, bench_medio)
 
@@ -113,7 +115,7 @@ class ScoreLogisticoUseCase:
             .group_by(CTeModel.macro_regiao_destino)
             .all()
         )
-        bench = {b.regiao: b.frete_kg_medio for b in self.db.query(BenchmarkModel).all()}
+        bench = mapa_medio_por_regiao_destino(self.db)
 
         scores = []
         for regiao, frete, peso in regioes:
@@ -212,7 +214,7 @@ class ScoreLogisticoUseCase:
             .group_by(CTeModel.macro_regiao_destino)
             .all()
         )
-        bench = {b.regiao: b.frete_kg_medio for b in self.db.query(BenchmarkModel).all()}
+        bench = mapa_medio_por_regiao_destino(self.db)
         excesso = 0.0
         for regiao, frete, peso in regioes:
             bk = bench.get(regiao)

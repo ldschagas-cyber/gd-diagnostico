@@ -10,9 +10,24 @@ export const CORES_CLASSIFICACAO = {
   "Muito Crítico": "error",
   "Sem referência": "default",
   "Sem dados": "default",
+  // Vocabulário do Comparativo de Mercado / Matriz Benchmark (OD) — v6.9
+  ABAIXO_P50: "success",
+  ENTRE_P50_P75: "info",
+  ACIMA_P75: "error",
+  SEM_REFERENCIA: "default",
 };
 
 export const corClassificacao = (c) => CORES_CLASSIFICACAO[c] || "default";
+
+// Rótulo em PT-BR para a classificação percentílica (Comparativo de Mercado).
+export const ROTULOS_CLASSIFICACAO_MERCADO = {
+  ABAIXO_P50: "Abaixo da mediana",
+  ENTRE_P50_P75: "Dentro do mercado",
+  ACIMA_P75: "Acima do mercado",
+  SEM_REFERENCIA: "Sem referência",
+};
+
+export const rotuloClassificacaoMercado = (c) => ROTULOS_CLASSIFICACAO_MERCADO[c] || c;
 
 // Nível de custo da transportadora (seção 10).
 export const CORES_NIVEL_CUSTO = {

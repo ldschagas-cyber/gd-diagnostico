@@ -1,5 +1,16 @@
 import { Card, CardContent, Typography, Stack, Box, Chip, LinearProgress } from "@mui/material";
-import { corClassificacao, corDesvio, fmtDesvio } from "../utils/benchmark";
+import { corClassificacao, corDesvio } from "../utils/benchmark";
+
+// Rótulo estendido do desvio, específico deste cartão (as tabelas de outras
+// telas de Benchmark usam o formato compacto `fmtDesvio`, que não é alterado).
+function rotuloDesvio(desvio_pct) {
+  const abs = Math.abs(desvio_pct ?? 0).toLocaleString("pt-BR", {
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 1,
+  });
+  if (Math.abs(desvio_pct ?? 0) < 0.05) return "Na média nacional";
+  return `${abs}% ${desvio_pct > 0 ? "acima" : "abaixo"} da média nacional`;
+}
 
 /**
  * Cartão que compara um indicador da empresa com a faixa de benchmark
@@ -29,7 +40,7 @@ export default function BenchmarkComparacao({ titulo, comp, formatar }) {
             {fmt(valor)}
           </Typography>
           <Typography variant="body2" sx={{ color: corDesvio(desvio_pct), fontWeight: 600 }}>
-            {fmtDesvio(desvio_pct)} vs. mercado
+            {rotuloDesvio(desvio_pct)}
           </Typography>
         </Stack>
 
@@ -52,13 +63,13 @@ export default function BenchmarkComparacao({ titulo, comp, formatar }) {
           />
           <Stack direction="row" justifyContent="space-between" sx={{ mt: 0.5 }}>
             <Typography variant="caption" color="text.secondary">
-              mín {fmt(benchmark_min)}
+              Mercado: Mínimo {fmt(benchmark_min)}
             </Typography>
             <Typography variant="caption" color="text.secondary">
-              médio {fmt(benchmark_medio)}
+              Mercado: Média {fmt(benchmark_medio)}
             </Typography>
             <Typography variant="caption" color="text.secondary">
-              máx {fmt(benchmark_max)}
+              Mercado: Máximo {fmt(benchmark_max)}
             </Typography>
           </Stack>
         </Box>
