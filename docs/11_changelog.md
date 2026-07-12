@@ -170,6 +170,28 @@ Resolve os dois pontos deixados como "decisão pendente" em [6.9.0]:
 
 **Rodapé do menu atualizado** de `v6.3` (desatualizado desde antes da v6.5.1) para `v6.9.1` — fecha o achado `UX-10` (`docs/19_fase6_ux_ui.md`).
 
+## [6.9.3] — Corrige periodo_ref muito longo em benchmark_dashboard.py
+
+`comparativo_mercado()` gravava `periodo_ref="COMPARATIVO"` (11 caracteres) em `benchmark_observado.periodo_ref` (`VARCHAR(7)`, pensado para `"YYYY-MM"`), quebrando com `StringDataRightTruncation` (500) toda chamada com escopo REGIAO ou CORREDOR — o frontend mostrava isso genericamente como "Network Error". Valor do sentinela reduzido para `"COMPAR"`. Achado durante verificação manual da tela Comparativo de Mercado.
+
+Também corrigido nesta leva: `frontend/vite.config.js` ganha `server.watch.usePolling` — sem isso, o Vite dev server rodando em Docker (bind mount Windows → WSL2 → container Linux) nunca detectava mudança de arquivo, exigindo restart manual do container a cada edição.
+
+## [6.10.0] — Consolida Metas+Benchmark%Frete e Hubs+Referência de Corredor; reorganiza Dashboard
+
+Fecha as duas consolidações de tela propostas via protótipo funcional e aprovadas pelo usuário, mais uma revisão dos indicadores do Dashboard.
+
+**Metas & Mercado (%)**: `Benchmarks.jsx` ("Benchmark % Frete legado") removida — suas 3 colunas de `% Frete/Mercadoria` (único campo ainda ativo) passam a ser exibidas junto da Meta, na mesma tabela por região de `Metas.jsx` (agora "Metas & Mercado (%)"). Sem mudança de schema ou endpoint — dois cadastros continuam existindo (`/metas/*`, `/benchmarks/*`), só a apresentação foi unificada.
+
+**Hubs Logísticos**: `BenchmarksCorredor.jsx` ("Referência de Corredor legado") removida — vira 3ª aba dentro de `HubsLogisticos.jsx`, ao lado de Hubs e Mapeamento Cliente→Hub, com o mesmo padrão de permissão mista (edição só superusuário) já usado pela aba de Hubs.
+
+Rotas antigas (`/configuracoes/benchmark-pct`, `/configuracoes/corredores`) mantidas como redirect de compatibilidade, mesmo padrão já usado para `/benchmark/matriz-od`.
+
+**Dashboard — indicadores nacionais**: reordenados (CT-e Analisados, Valor de Mercadoria Transportada, Peso Transportado, Total de Frete, Custo por kg, % Frete/Mercadoria — 6 cards no mesmo padrão `StatCard`). Sparkline do card Total de Frete removida (redundante com o gráfico de evolução, ver abaixo). Dois gráficos novos: "Evolução do Valor de Frete" e "Evolução do % Frete" (barras mensais). `evolucao_frete[]` ganha o campo `frete_pct` (`frete_mensal_ativos` agora soma também `valor_mercadoria` por competência). "Frete por Kg" e "% Frete / Valor Mercadoria" renomeados para "...Regional" e reduzidos (lado a lado).
+
+**Diagnóstico (DLG) — remove duplicação com o Dashboard**: os 4 cards de resumo nacional (CT-e analisados, Frete total, R$/kg médio, % Frete/merc. médio) removidos — duplicavam os mesmos indicadores do Dashboard, calculados por um caminho de código separado (`DlgUseCase._headline_medios`) com um filtro sutilmente diferente (exclui CT-e com peso/mercadoria = 0), risco real de mostrar número diferente do Dashboard para o "mesmo" indicador. `_headline_medios()` removido; `DlgResumoOut` perde os 4 campos correspondentes.
+
+**Sem migration**: nenhuma tabela nova ou alterada em toda esta leva.
+
 ---
 
 ## Nota sobre nomenclatura de versão
