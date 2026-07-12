@@ -107,11 +107,19 @@ class BenchmarkDashboardUseCase:
         data_inicio: Optional[date] = None, data_fim: Optional[date] = None,
     ) -> list[dict]:
         """``escopo``: NACIONAL | REGIAO | CORREDOR. Regenera o Benchmark
-        Observado do período sob o ``periodo_ref`` reservado "COMPARATIVO"
+        Observado do período sob o ``periodo_ref`` reservado "COMPAR"
         (idempotente — reaproveita ``BenchmarkObservadoUseCase``, não
-        duplica o cálculo de percentil real do cliente)."""
-        self.observado.gerar(empresa_id, periodo_ref="COMPARATIVO", data_inicio=data_inicio, data_fim=data_fim)
-        linhas = self.observado.listar(empresa_id, periodo_ref="COMPARATIVO")
+        duplica o cálculo de percentil real do cliente).
+
+        Nota (bug corrigido em v6.9.3): o valor original "COMPARATIVO"
+        (11 caracteres) excedia ``benchmark_observado.periodo_ref``
+        (``VARCHAR(7)``, pensado para "YYYY-MM"), causando
+        ``StringDataRightTruncation`` em toda chamada com escopo != NACIONAL
+        (a exceção interrompia o loop antes de gravar a linha NACIONAL
+        também, mas o card de Confiabilidade/Cobertura, que não passa por
+        este método, mascarava o erro ao continuar exibindo dado válido)."""
+        self.observado.gerar(empresa_id, periodo_ref="COMPAR", data_inicio=data_inicio, data_fim=data_fim)
+        linhas = self.observado.listar(empresa_id, periodo_ref="COMPAR")
 
         itens = []
         for o in linhas:
