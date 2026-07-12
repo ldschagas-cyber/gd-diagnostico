@@ -70,10 +70,6 @@ class DlgTopItem(BaseModel):
 
 
 class DlgResumoOut(BaseModel):
-    total_ctes: int = 0
-    frete_total: float = 0.0
-    rs_kg_medio: float = 0.0
-    pct_frete_merc_medio: float = 0.0
     distribuicao_classificacao: Dict[str, int] = {}
     top_filiais: List[dict] = []
     top_clientes: List[dict] = []  # compatibilidade retroativa (aponta para FILIAL)

@@ -1004,45 +1004,6 @@ class DlgUseCase:
         stmt = stmt.order_by(DlgOutlierModel.desvio_pct.desc())
         return list(self.db.scalars(stmt).all())
 
-    def _headline_medios(
-        self,
-        empresa_id: int,
-        data_inicio: Optional[date] = None,
-        data_fim: Optional[date] = None,
-    ) -> Dict[str, float]:
-        """Indicadores 'médios' do topo do dashboard, calculados direto do CT-e
-        (ponderados por valor), independentes do modo consolidado/mensal:
-
-        - ``rs_kg_medio``          = Σfrete / Σpeso   (apenas CT-e com peso > 0)
-        - ``pct_frete_merc_medio`` = Σfrete / Σmerc × 100
-          (apenas CT-e com valor_mercadoria > 0 — CT-e sem ``vCarga`` no XML
-          NÃO entram no numerador nem no denominador, evitando distorcer o %).
-        """
-        di, df = data_inicio, data_fim
-
-        def _somas(coluna) -> Tuple[float, float]:
-            stmt = select(
-                func.coalesce(func.sum(CTeModel.valor_frete), 0.0),
-                func.coalesce(func.sum(coluna), 0.0),
-            ).where(
-                CTeModel.empresa_id == empresa_id,
-                CTeModel.status == CTE_STATUS_ATIVO,
-                coluna > 0,
-            )
-            if di:
-                stmt = stmt.where(CTeModel.data_emissao >= di)
-            if df:
-                stmt = stmt.where(CTeModel.data_emissao <= df)
-            frete, base = self.db.execute(stmt).one()
-            return float(frete or 0), float(base or 0)
-
-        frete_p, peso_tot = _somas(CTeModel.peso)
-        frete_m, merc_tot = _somas(CTeModel.valor_mercadoria)
-        return {
-            "rs_kg_medio": _div(frete_p, peso_tot),
-            "pct_frete_merc_medio": round(_div(frete_m, merc_tot) * 100, 4),
-        }
-
     def resumo(
         self,
         empresa_id: int,
@@ -1054,7 +1015,6 @@ class DlgUseCase:
         rows = self.listar(empresa_id, data_inicio=data_inicio, data_fim=data_fim)
         if not rows:
             return {}
-        med = self._headline_medios(empresa_id, data_inicio, data_fim)
         por_dim: Dict[str, list] = defaultdict(list)
         for r in rows:
             por_dim[r.dimensao].append(r)
@@ -1069,10 +1029,6 @@ class DlgUseCase:
             return dict(clf)
 
         return {
-            "total_ctes": sum(r.qtd_ctes for r in por_dim.get("REGIAO", [])),
-            "frete_total": round(sum(r.frete_total for r in por_dim.get("REGIAO", [])), 2),
-            "rs_kg_medio": med["rs_kg_medio"],
-            "pct_frete_merc_medio": med["pct_frete_merc_medio"],
             "distribuicao_classificacao": _dist(rows),
             "top_filiais": [
                 {"chave": r.chave_label, "frete": r.frete_total,

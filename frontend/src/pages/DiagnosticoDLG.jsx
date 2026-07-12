@@ -418,26 +418,13 @@ export default function DiagnosticoDLG() {
 
       {resumo && (
         <>
-          {/* ── KPIs (independentes do modo) ─────────────────────────────── */}
-          <Grid container spacing={2} sx={{ mb: 2.5 }}>
-            <Grid item xs={12} sm={6} md={3}>
-              <StatCard rotulo="CT-e analisados" valor={fmtNumero(resumo.total_ctes, 0)} />
-            </Grid>
-            <Grid item xs={12} sm={6} md={3}>
-              <StatCard rotulo="Frete total" valor={fmtMoeda(resumo.frete_total)} />
-            </Grid>
-            <Grid item xs={12} sm={6} md={3}>
-              <StatCard rotulo="R$/kg médio" valor={`R$ ${fmtNumero(resumo.rs_kg_medio, 4)}`} />
-            </Grid>
-            <Grid item xs={12} sm={6} md={3}>
-              <StatCard
-                rotulo="% Frete / merc. médio"
-                valor={`${fmtNumero(resumo.pct_frete_merc_medio, 2)}%`}
-                cor={GD.blue}
-                legenda="Base: CT-e com valor de mercadoria"
-              />
-            </Grid>
-          </Grid>
+          {/* Os 4 cards de resumo nacional (CT-e analisados, Frete total, R$/kg
+              médio, % Frete/merc. médio) foram removidos daqui — duplicavam os
+              mesmos indicadores do Dashboard (mesmo grupo de menu), calculados
+              por um caminho de código separado (DlgUseCase._headline_medios)
+              que, além de redundante, tinha um filtro sutilmente diferente
+              (exclui CT-e com peso/mercadoria = 0), com risco de mostrar um
+              número diferente do Dashboard para o "mesmo" indicador. */}
 
           {/* ── Controles: dimensão + classificação (esquerda) | modo (direita) ──
                Layout aprovado no mock: uma única linha. O filtro de Classificação
