@@ -13,7 +13,6 @@ import Transportadoras from "./pages/Transportadoras";
 import Regioes from "./pages/Regioes";
 import Cidades from "./pages/Cidades";
 import Metas from "./pages/Metas";
-import Benchmarks from "./pages/Benchmarks";
 import ImportacaoCte from "./pages/ImportacaoCte";
 import ImportacaoExcel from "./pages/ImportacaoExcel";
 import Relatorios from "./pages/Relatorios";
@@ -28,7 +27,6 @@ import BenchmarkComparativoMercado from "./pages/BenchmarkComparativoMercado";
 import PotencialEconomia from "./pages/PotencialEconomia";
 import DashboardExecutivo from "./pages/DashboardExecutivo";
 import HubsLogisticos from "./pages/HubsLogisticos";
-import BenchmarksCorredor from "./pages/BenchmarksCorredor";
 // Módulo Concorrência Logística (V3.1)
 import BidDashboard from "./pages/BidDashboard";
 import BidLista from "./pages/BidLista";
@@ -93,6 +91,8 @@ export default function App() {
                 <Route path="/benchmark/corredores" element={<Navigate to="/benchmark/diagnostico" replace />} />
                 <Route path="/benchmark/transportadoras" element={<Navigate to="/benchmark/executivo" replace />} />
                 <Route path="/benchmark/mbl" element={<Navigate to="/bid/mbl" replace />} />
+                <Route path="/configuracoes/benchmark-pct" element={<Navigate to="/metas" replace />} />
+                <Route path="/configuracoes/corredores" element={<Navigate to="/configuracoes/hubs-logisticos" replace />} />
 
                 {/* ── Importação ── */}
                 <Route path="/importar/cte" element={<ImportacaoCte />} />
@@ -129,24 +129,7 @@ export default function App() {
                 <Route path="/regioes" element={<Regioes />} />
                 <Route path="/cidades" element={<Cidades />} />
                 <Route path="/metas" element={<Metas />} />
-                <Route
-                  path="/configuracoes/benchmark-pct"
-                  element={
-                    <ProtectedRoute soAdmin>
-                      <Benchmarks />
-                    </ProtectedRoute>
-                  }
-                />
                 <Route path="/configuracoes/hubs-logisticos" element={<HubsLogisticos />} />
-
-                <Route
-                  path="/configuracoes/corredores"
-                  element={
-                    <ProtectedRoute soAdmin>
-                      <BenchmarksCorredor />
-                    </ProtectedRoute>
-                  }
-                />
                 <Route
                   path="/usuarios"
                   element={

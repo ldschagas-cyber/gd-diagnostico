@@ -12,6 +12,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import {
   benchmarkApi,
+  benchmarksApi,
   bidApi,
   cidadesApi,
   clustersApi,
@@ -174,6 +175,22 @@ export function useSalvarMetas() {
     regional: useMutation({
       mutationFn: (payload) => metasApi.salvarRegional(payload),
       onSuccess: () => qc.invalidateQueries({ queryKey: qk.metasRegionais() }),
+    }),
+  };
+}
+
+/* ──────────────── Benchmark % Frete (legado, v6.10.0 — consolidado em /metas) ──── */
+
+export function useBenchmarksPct(opts = {}) {
+  return useQuery({ queryKey: qk.benchmarksRegioes(), queryFn: benchmarksApi.listar, ...opts });
+}
+
+export function useMutacoesBenchmarkPct() {
+  const qc = useQueryClient();
+  return {
+    salvar: useMutation({
+      mutationFn: ({ regiao, payload }) => benchmarksApi.salvar(regiao, payload),
+      onSuccess: () => qc.invalidateQueries({ queryKey: qk.benchmarksRegioes() }),
     }),
   };
 }

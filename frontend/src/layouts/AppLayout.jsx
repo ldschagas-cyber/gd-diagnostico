@@ -34,7 +34,6 @@ import LightbulbIcon        from "@mui/icons-material/Lightbulb";
 import RecommendIcon        from "@mui/icons-material/Recommend";
 import SpeedIcon            from "@mui/icons-material/Speed";
 import LibraryBooksIcon     from "@mui/icons-material/LibraryBooks";
-import RouteIcon            from "@mui/icons-material/Route";
 import GridOnIcon           from "@mui/icons-material/GridOn";
 import HubIcon              from "@mui/icons-material/Hub";
 import { useAuth }         from "../contexts/AuthContext";
@@ -65,10 +64,8 @@ const GRUPOS = [
   {
     titulo: "Configuração",
     itens: [
-      { rotulo: "Metas",       icone: <FlagIcon />,  rota: "/metas" },
+      { rotulo: "Metas & Mercado (%)", icone: <FlagIcon />,  rota: "/metas" },
       { rotulo: "Hubs Logísticos", icone: <HubIcon />, rota: "/configuracoes/hubs-logisticos" },
-      { rotulo: "Referência de Corredor (legado)", icone: <RouteIcon />, rota: "/configuracoes/corredores", soAdmin: true },
-      { rotulo: "Benchmark % Frete (legado)", icone: <TableChartIcon />, rota: "/configuracoes/benchmark-pct", soAdmin: true },
     ],
   },
   {
