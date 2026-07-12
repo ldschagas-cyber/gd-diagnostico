@@ -963,12 +963,12 @@ class CTeRepository(ICTeRepository):
         return saida
 
     def frete_mensal_ativos(self, empresa_id: int, meses: int = 6) -> list[dict]:
-        """Soma o frete (apenas CT-es ATIVOS) por competência (mês/ano).
+        """Soma o frete e a mercadoria (apenas CT-es ATIVOS) por competência (mês/ano).
 
-        Base do sparkline de evolução do Frete Total no dashboard. Retorna os
-        últimos ``meses`` em ordem cronológica (mais antigo → mais recente).
-        Agregação no banco (GROUP BY ano/mês da emissão), compatível com
-        PostgreSQL (EXTRACT nativo) e SQLite (strftime), no mesmo padrão de
+        Base das evoluções mensais do dashboard (Frete Total e % Frete/Mercadoria).
+        Retorna os últimos ``meses`` em ordem cronológica (mais antigo → mais
+        recente). Agregação no banco (GROUP BY ano/mês da emissão), compatível
+        com PostgreSQL (EXTRACT nativo) e SQLite (strftime), no mesmo padrão de
         ``contar_por_competencia``. CT-es sem data de emissão são ignorados.
         """
         from sqlalchemy import extract, func
@@ -979,6 +979,7 @@ class CTeRepository(ICTeRepository):
             select(
                 ano.label("ano"), mes.label("mes"),
                 func.sum(CTeModel.valor_frete).label("frete"),
+                func.sum(CTeModel.valor_mercadoria).label("mercadoria"),
             )
             .where(
                 CTeModel.empresa_id == empresa_id,
@@ -993,8 +994,9 @@ class CTeRepository(ICTeRepository):
             {
                 "competencia": f"{int(a):04d}-{int(m):02d}",
                 "frete_total": float(frete or 0.0),
+                "frete_pct": float(frete or 0.0) / float(mercadoria) * 100 if mercadoria else 0.0,
             }
-            for a, m, frete in rows
+            for a, m, frete, mercadoria in rows
         ]
         saida.reverse()  # cronológico: mais antigo → mais recente
         return saida

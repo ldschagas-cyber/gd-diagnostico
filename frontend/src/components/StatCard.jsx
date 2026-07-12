@@ -17,6 +17,7 @@ export default function StatCard({
   desvio,
   desvioPositivoRuim = true,
   icone,
+  compacto = false,
 }) {
   const temDesvio = desvio !== null && desvio !== undefined && !Number.isNaN(desvio);
   let corSelo = "default";
@@ -37,24 +38,28 @@ export default function StatCard({
 
   return (
     <Card sx={{ height: "100%" }}>
-      <CardContent>
+      <CardContent sx={compacto ? { p: 1.75, "&:last-child": { pb: 1.75 } } : undefined}>
         <Stack direction="row" justifyContent="space-between" alignItems="flex-start">
           <Typography
             variant="overline"
             color="text.secondary"
-            sx={{ lineHeight: 1.3 }}
+            sx={{ lineHeight: 1.3, fontSize: compacto ? 10.5 : undefined }}
           >
             {rotulo}
           </Typography>
-          {icone && <Box sx={{ color: cor, opacity: 0.8 }}>{icone}</Box>}
+          {icone && (
+            <Box sx={{ color: cor, opacity: 0.8, "& svg": compacto ? { fontSize: 19 } : undefined }}>
+              {icone}
+            </Box>
+          )}
         </Stack>
         <Typography
-          variant="h4"
+          variant={compacto ? "h5" : "h4"}
           sx={{ color: cor, fontWeight: 700, mt: 0.5, fontFamily: "'Sora', sans-serif" }}
         >
           {valor}
         </Typography>
-        <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 1 }}>
+        <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 1, flexWrap: "wrap" }}>
           {legenda && (
             <Typography variant="caption" color="text.secondary">
               {legenda}

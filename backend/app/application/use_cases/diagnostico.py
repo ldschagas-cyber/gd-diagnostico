@@ -86,14 +86,19 @@ class DiagnosticoUseCase:
     def _evolucao_frete(
         self, empresa_id: int, meses: int = 6
     ) -> List[EvolucaoMensalItem]:
-        """Série mensal do Frete Total (apenas ativos) para o sparkline do card.
+        """Série mensal de Frete Total e % Frete/Mercadoria (apenas ativos).
 
-        Agregação no banco (ver ``CTeRepository.frete_mensal_ativos``); só o
-        ``frete_total`` é usado pelo sparkline. Ordem cronológica.
+        Agregação no banco (ver ``CTeRepository.frete_mensal_ativos``). Usada
+        pelo sparkline do card Frete Total e pelos gráficos de evolução mensal
+        (Frete Total e % Frete) do Dashboard. Ordem cronológica.
         """
         linhas = self.cte_repo.frete_mensal_ativos(empresa_id, meses=meses)
         return [
-            EvolucaoMensalItem(mes=l["competencia"], frete_total=l["frete_total"])
+            EvolucaoMensalItem(
+                mes=l["competencia"],
+                frete_total=l["frete_total"],
+                frete_pct=l["frete_pct"],
+            )
             for l in linhas
         ]
 

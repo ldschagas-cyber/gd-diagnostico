@@ -23,6 +23,7 @@ import PaidIcon from "@mui/icons-material/Paid";
 import ScaleIcon from "@mui/icons-material/Scale";
 import PercentIcon from "@mui/icons-material/Percent";
 import ReceiptLongIcon from "@mui/icons-material/ReceiptLong";
+import FactCheckIcon from "@mui/icons-material/FactCheck";
 import LightbulbIcon from "@mui/icons-material/Lightbulb";
 import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutline";
 import CancelOutlinedIcon from "@mui/icons-material/CancelOutlined";
@@ -44,44 +45,6 @@ import {
   rotuloMacro,
 } from "../utils/format";
 import { GD } from "../theme";
-
-/**
- * Sparkline (SVG) do Frete Total: tendência dos últimos meses. Sem eixos nem
- * rótulos — apenas a linha e o ponto do mês mais recente. Normaliza os valores
- * ao próprio min/max para dar amplitude visual mesmo com variações pequenas.
- */
-function Sparkline({ pontos, cor = GD.blue, altura = 38 }) {
-  if (!pontos || pontos.length < 2) return null;
-  const W = 220;
-  const H = 44;
-  const PAD = 4;
-  const min = Math.min(...pontos);
-  const max = Math.max(...pontos);
-  const span = max - min || 1;
-  const passo = (W - PAD * 2) / (pontos.length - 1);
-  const coords = pontos.map((v, i) => {
-    const x = PAD + i * passo;
-    const y = PAD + (H - PAD * 2) * (1 - (v - min) / span);
-    return [x, y];
-  });
-  const linha = coords.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(" ");
-  const [ux, uy] = coords[coords.length - 1];
-  return (
-    <Box sx={{ mt: 1.25 }}>
-      <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: altura, display: "block" }}>
-        <polyline
-          points={linha}
-          fill="none"
-          stroke={cor}
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-        <circle cx={ux} cy={uy} r="3.5" fill="#fff" stroke={cor} strokeWidth="2" />
-      </svg>
-    </Box>
-  );
-}
 
 export default function Dashboard() {
   const { empresaAtiva, empresaAtivaId } = useEmpresa();
@@ -126,11 +89,6 @@ export default function Dashboard() {
 
   const nac = diag?.nacional;
   const semDados = diag && nac && nac.qtd_ctes === 0;
-
-  // Série mensal do Frete Total (sparkline). Regra de negócio: só exibe a
-  // tendência com ao menos 6 meses de movimentação (evita ruído com poucos pontos).
-  const serieFrete = (diag?.evolucao_frete || []).map((e) => e.frete_total);
-  const temHistoricoFrete = serieFrete.length >= 6;
 
   return (
     <Box>
@@ -183,40 +141,54 @@ export default function Dashboard() {
 
       {nac && (
         <>
-          {/* Indicadores nacionais (RF011) — 3 cards (redesenho mock 07/2026) */}
-          <Grid container spacing={2.5} sx={{ mb: 1 }}>
-            {/* Frete total com sparkline de evolução (últimos 6 meses) */}
+          {/* Indicadores nacionais (RF011) — ordem MELHORIA v6.10 (revisão 3):
+              Linha 1 — CT-e Analisados, Valor de Mercadoria Transportada,
+              Peso Transportado. Linha 2 — Total de Frete, Custo por kg,
+              % Frete/Mercadoria — 6 cards no mesmo padrão StatCard, sem
+              sparkline (a evolução mensal já tem gráfico dedicado logo
+              abaixo) nem velocímetro (revertido a pedido). */}
+          <Grid container spacing={2.5} sx={{ mb: 2.5 }}>
             <Grid item xs={12} sm={6} md={4}>
-              <Card sx={{ height: "100%" }}>
-                <CardContent>
-                  <Stack direction="row" justifyContent="space-between" alignItems="flex-start">
-                    <Typography variant="overline" color="text.secondary" sx={{ lineHeight: 1.3 }}>
-                      Frete total
-                    </Typography>
-                    <Box sx={{ color: GD.indigo, opacity: 0.8 }}>
-                      <PaidIcon />
-                    </Box>
-                  </Stack>
-                  <Typography
-                    variant="h4"
-                    sx={{ color: GD.indigo, fontWeight: 700, mt: 0.5, fontFamily: "'Sora', sans-serif" }}
-                  >
-                    {fmtMoeda(nac.valor_total_frete)}
-                  </Typography>
-                  {temHistoricoFrete ? (
-                    <>
-                      <Sparkline pontos={serieFrete} cor={GD.blue} />
-                      <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.5 }}>
-                        Últimos {serieFrete.length} meses
-                      </Typography>
-                    </>
-                  ) : (
-                    <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 1 }}>
-                      {`${nac.qtd_ctes} CT-es`}
-                    </Typography>
-                  )}
-                </CardContent>
-              </Card>
+              <StatCard
+                rotulo="CT-e Analisados"
+                valor={fmtNumero(nac.qtd_ctes, 0)}
+                legenda="CT-es ativos no período"
+                cor={GD.indigo}
+                icone={<FactCheckIcon />}
+              />
+            </Grid>
+            <Grid item xs={12} sm={6} md={4}>
+              <StatCard
+                rotulo="Valor de Mercadoria Transportada"
+                valor={fmtMoeda(nac.valor_total_mercadoria)}
+                legenda={`${fmtNumero(nac.qtd_ctes, 0)} CT-es`}
+                cor={GD.ok}
+                icone={<ReceiptLongIcon />}
+              />
+            </Grid>
+            <Grid item xs={12} sm={6} md={4}>
+              <StatCard
+                rotulo="Peso Transportado"
+                valor={`${fmtNumero(nac.peso_total, 0)} kg`}
+                legenda={fmtRsKg(nac.frete_rs_kg)}
+                cor={GD.blueDark}
+                icone={<ScaleIcon />}
+              />
+            </Grid>
+          </Grid>
+
+          <Grid container spacing={2.5} sx={{ mb: 1 }} alignItems="stretch">
+            {/* Total de Frete — a evolução mensal já tem gráfico dedicado
+                logo abaixo ("Evolução do Valor de Frete"); a sparkline foi
+                removida daqui por ser a mesma série duplicada sem rótulo. */}
+            <Grid item xs={12} sm={6} md={4}>
+              <StatCard
+                rotulo="Total de Frete"
+                valor={fmtMoeda(nac.valor_total_frete)}
+                legenda={`${fmtNumero(nac.qtd_ctes, 0)} CT-es`}
+                cor={GD.indigo}
+                icone={<PaidIcon />}
+              />
             </Grid>
             <Grid item xs={12} sm={6} md={4}>
               <StatCard
@@ -230,7 +202,7 @@ export default function Dashboard() {
             </Grid>
             <Grid item xs={12} sm={6} md={4}>
               <StatCard
-                rotulo="% Frete s/ mercadoria"
+                rotulo="% Frete / Mercadoria"
                 valor={fmtPct(nac.frete_pct)}
                 legenda={nac.meta_pct ? `Meta: ${fmtPct(nac.meta_pct)}` : "Sem meta definida"}
                 cor={GD.amberDark}
@@ -238,18 +210,6 @@ export default function Dashboard() {
                 icone={<PercentIcon />}
               />
             </Grid>
-            {/* Card "Peso total" removido do mock — desabilitado (apagar depois). */}
-            {false && (
-            <Grid item xs={12} sm={6} md={3}>
-              <StatCard
-                rotulo="Peso total"
-                valor={`${fmtNumero(nac.peso_total, 0)} kg`}
-                legenda={`Mercadoria: ${fmtMoeda(nac.valor_total_mercadoria)}`}
-                cor={GD.ok}
-                icone={<ReceiptLongIcon />}
-              />
-            </Grid>
-            )}
           </Grid>
 
           {/* Situação dos CT-es e custos (MELHORIAS 3 a 7) — fora do mock, desabilitados (apagar depois). */}

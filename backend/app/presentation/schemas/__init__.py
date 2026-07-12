@@ -392,10 +392,12 @@ class IndicadorPrazoOut(BaseModel):
 
 
 class EvolucaoFreteOut(BaseModel):
-    """Ponto mensal do sparkline de Frete Total (card do dashboard)."""
+    """Ponto mensal de evolução (sparkline do card + gráficos de Frete Total
+    e % Frete/Mercadoria do dashboard)."""
     model_config = ConfigDict(from_attributes=True)
     mes: str
     frete_total: float
+    frete_pct: float = 0.0
 
 
 class DiagnosticoOut(BaseModel):
