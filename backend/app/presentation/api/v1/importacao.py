@@ -9,6 +9,8 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Upload
 from fastapi.responses import Response
 
 from app.application.use_cases.cancelamento import CancelamentoCteUseCase
+from app.application.use_cases.carta_correcao import CartaCorrecaoCteUseCase
+from app.application.use_cases.dlg import DlgUseCase
 from app.application.use_cases.importacao import ImportarCTeUseCase
 from app.core.config import settings
 from app.infrastructure.parsers.excel_parser import gerar_modelo_excel
@@ -16,18 +18,23 @@ from app.presentation.api.dependencies import (
     bloquear_visualizador,
     get_cte_repo,
     get_current_user,
+    get_db,
     require_admin,
     verificar_acesso_empresa,
     get_empresa_repo,
     get_filial_repo,
     get_transportadora_repo,
 )
+from app.application.dtos import ResultadoImportacao
 from app.presentation.schemas import (
     CancelamentoLogOut,
     CompetenciaCteOut,
     ContagemImportacaoOut,
+    CteListaPaginadaOut,
+    ExcluirCtesIn,
     ResultadoCancelamentoOut,
     ResultadoExclusaoOut,
+    ResultadoImportacaoCteOut,
     ResultadoImportacaoOut,
 )
 
@@ -58,6 +65,27 @@ def _validar_xml(nome: str, conteudo: bytes) -> None:
     cabecalho = conteudo.lstrip(b"\xef\xbb\xbf")
     if not cabecalho.startswith(b"<?xml") and not cabecalho.lstrip(b" \t\r\n").startswith(b"<"):
         raise HTTPException(400, f"Arquivo '{nome}' não parece ser um XML válido.")
+
+
+def _classificar_xml(conteudo: bytes) -> str:
+    """Classifica um XML do lote de upload em 'CTE', 'EVENTO_CANCELAMENTO' ou
+    'EVENTO_CCE' (Carta de Correção, v6.11).
+
+    Detecção tolerante por presença de tag (mesmo critério dos parsers, que
+    também ignoram namespace/envelope): um XML de evento sempre contém
+    <infEvento>, enquanto um CT-e contém <infCte>. Entre os eventos, a tag
+    <tpEvento>110110</tpEvento> identifica uma Carta de Correção; qualquer
+    outro tpEvento (110111 = cancelamento, ou algum não suportado) segue para
+    o caminho de cancelamento e é rejeitado pelo parser com mensagem clara
+    quando não for de fato um cancelamento (comportamento já existente).
+    Arquivos sem nenhuma das duas tags seguem para o caminho de CT-e e são
+    rejeitados pelo parser correspondente.
+    """
+    if b"infEvento" not in conteudo:
+        return "CTE"
+    if b"<tpEvento>110110</tpEvento>" in conteudo:
+        return "EVENTO_CCE"
+    return "EVENTO_CANCELAMENTO"
 
 
 def _validar_excel(nome: str, conteudo: bytes) -> None:
@@ -100,7 +128,7 @@ async def _ler_com_limite(arquivo: UploadFile, limite: int) -> bytes:
     return bytes(buffer)
 
 
-@router.post("/cte/{empresa_id}", response_model=ResultadoImportacaoOut)
+@router.post("/cte/{empresa_id}", response_model=ResultadoImportacaoCteOut)
 async def importar_cte_xml(
     empresa_id: int,
     arquivos: list[UploadFile] = File(...),
@@ -111,7 +139,16 @@ async def importar_cte_xml(
     filial_repo=Depends(get_filial_repo),
     transp_repo=Depends(get_transportadora_repo),
 ):
-    """Upload de múltiplos XMLs de CT-e (RF008).
+    """Upload de múltiplos XMLs de CT-e (RF008), incluindo cancelamento e CCe.
+
+    O lote pode misturar XMLs de CT-e, XMLs de evento de cancelamento
+    (tpEvento 110111) e XMLs de Carta de Correção (CCe, tpEvento 110110) —
+    cada arquivo é classificado automaticamente pelo conteúdo e roteado para
+    o caso de uso correspondente (MELHORIA v6.11). CCe nunca altera o CT-e
+    automaticamente — é apenas registrada no log para revisão manual, pois a
+    correção pode incidir sobre campo que a própria CCe não deveria alterar
+    (ex.: quantidade/peso de carga, vedado pelo Art. 58-B do Convênio
+    SINIEF 06/89).
 
     Limites: máx 500 arquivos por lote, 10 MB por arquivo.
     """
@@ -120,18 +157,41 @@ async def importar_cte_xml(
     if len(arquivos) > MAX_XML_BATCH:
         raise HTTPException(400, f"Lote excede o limite de {MAX_XML_BATCH} arquivos.")
 
-    conteudos = []
+    conteudos_cte: list[tuple[str, bytes]] = []
+    conteudos_cancelamento: list[tuple[str, bytes]] = []
+    conteudos_cce: list[tuple[str, bytes]] = []
     for f in arquivos:
         dados = await _ler_com_limite(f, MAX_XML_BYTES)
-        _validar_xml(f.filename or "arquivo.xml", dados)
-        conteudos.append((f.filename or "arquivo.xml", dados))
+        nome = f.filename or "arquivo.xml"
+        _validar_xml(nome, dados)
+        tipo = _classificar_xml(dados)
+        if tipo == "EVENTO_CCE":
+            conteudos_cce.append((nome, dados))
+        elif tipo == "EVENTO_CANCELAMENTO":
+            conteudos_cancelamento.append((nome, dados))
+        else:
+            conteudos_cte.append((nome, dados))
 
-    uc = _build_uc(cte_repo, filial_repo, transp_repo)
-    try:
-        resultado = uc.importar_xmls(empresa_id, conteudos)
-    except ValueError as exc:
-        raise HTTPException(400, str(exc))
-    return resultado
+    if conteudos_cte:
+        uc = _build_uc(cte_repo, filial_repo, transp_repo)
+        try:
+            resultado_importacao = uc.importar_xmls(empresa_id, conteudos_cte)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc))
+    else:
+        resultado_importacao = ResultadoImportacao(total_processados=0)
+
+    uc_cancelamento = CancelamentoCteUseCase(cte_repo)
+    resultado_cancelamento = uc_cancelamento.importar_eventos(empresa_id, conteudos_cancelamento)
+
+    uc_carta_correcao = CartaCorrecaoCteUseCase(cte_repo)
+    resultado_carta_correcao = uc_carta_correcao.importar_eventos(empresa_id, conteudos_cce)
+
+    return {
+        "importacao": resultado_importacao,
+        "cancelamento": resultado_cancelamento,
+        "carta_correcao": resultado_carta_correcao,
+    }
 
 
 @router.post("/cte/cancelamento/{empresa_id}", response_model=ResultadoCancelamentoOut)
@@ -267,6 +327,57 @@ def listar_competencias_cte(
     return cte_repo.contar_por_competencia(empresa_id)
 
 
+@router.get("/dados/{empresa_id}/ctes", response_model=CteListaPaginadaOut)
+def listar_ctes(
+    empresa_id: int,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(25, ge=1, le=100),
+    status: str | None = Query(None, description="ATIVO ou CANCELADO — omita para todos."),
+    origem: str | None = Query(None, description="XML ou EXCEL — omita para todos."),
+    _=Depends(verificar_acesso_empresa),
+    cte_repo=Depends(get_cte_repo),
+):
+    """Lista os CT-es individuais da empresa, paginado, para a grid da tela de
+    importação (v6.11). Leitura — disponível a qualquer usuário com acesso à
+    empresa, sem exigir perfil administrador.
+    """
+    status_norm = (status or "").strip().upper() or None
+    if status_norm and status_norm not in ("ATIVO", "CANCELADO"):
+        raise HTTPException(400, "Status inválido. Use ATIVO, CANCELADO ou omita.")
+    origem_norm = (origem or "").strip().upper() or None
+    if origem_norm and origem_norm not in ("XML", "EXCEL"):
+        raise HTTPException(400, "Origem inválida. Use XML, EXCEL ou omita.")
+
+    itens, total = cte_repo.listar_paginado(
+        empresa_id, page=page, page_size=page_size, status=status_norm, origem=origem_norm
+    )
+    return {"items": itens, "total": total}
+
+
+@router.delete("/dados/{empresa_id}/ctes", response_model=ResultadoExclusaoOut)
+def excluir_ctes_selecionados(
+    empresa_id: int,
+    payload: ExcluirCtesIn,
+    _=Depends(verificar_acesso_empresa),
+    __=Depends(require_admin),
+    cte_repo=Depends(get_cte_repo),
+    db=Depends(get_db),
+):
+    """Exclui os CT-es selecionados na grid (v6.11), pelos seus ids.
+
+    Operação destrutiva restrita a administrador, mesma convenção de risco de
+    `excluir_dados_importados`. Ids que não pertencem à empresa são
+    ignorados silenciosamente (isolamento multi-tenant). Reprocessa o DLG em
+    seguida para não deixar filial/período com contagem obsoleta.
+    """
+    if not payload.ids:
+        raise HTTPException(400, "Nenhum CT-e selecionado.")
+    excluidos = cte_repo.excluir_por_ids(empresa_id, payload.ids)
+    if excluidos:
+        DlgUseCase(db).limpar_e_reprocessar(empresa_id)
+    return {"excluidos": excluidos}
+
+
 @router.delete("/dados/{empresa_id}", response_model=ResultadoExclusaoOut)
 def excluir_dados_importados(
     empresa_id: int,
@@ -281,12 +392,14 @@ def excluir_dados_importados(
     _=Depends(verificar_acesso_empresa),
     __=Depends(require_admin),
     cte_repo=Depends(get_cte_repo),
+    db=Depends(get_db),
 ):
     """Exclui dados importados da empresa (admin). Operação destrutiva.
 
     Proteção: o cliente deve informar `confirmar_quantidade` igual à contagem
     atual do escopo selecionado. Se divergir (dados mudaram ou número digitado
-    incorreto), a exclusão é recusada sem alterar nada.
+    incorreto), a exclusão é recusada sem alterar nada. Reprocessa o DLG em
+    seguida para não deixar filial/período com contagem obsoleta.
     """
     origem_norm = (origem or "").strip().upper() or None
     if origem_norm and origem_norm not in ("XML", "EXCEL"):
@@ -308,4 +421,6 @@ def excluir_dados_importados(
         )
 
     excluidos = cte_repo.excluir_por_empresa(empresa_id, origem_norm)
+    if excluidos:
+        DlgUseCase(db).limpar_e_reprocessar(empresa_id)
     return {"excluidos": excluidos}

@@ -33,11 +33,36 @@ class UserModel(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     is_superuser: Mapped[bool] = mapped_column(Boolean, default=False)
     role: Mapped[str] = mapped_column(String(20), default="ANALISTA", nullable=True)
-    # Multi-tenant (R-01): usuário vinculado a uma empresa. NULL + is_superuser
-    # = acesso global (equipe GD Conecta). Caso contrário, escopo à própria empresa.
+    # Multi-tenant (R-01): empresa padrão/preferida — usada só para pré-selecionar
+    # a empresa na tela de login. NULL + is_superuser = acesso global (equipe GD
+    # Conecta). A fonte de verdade da autorização é `usuario_empresas` (M:N) via
+    # o relationship `empresas` abaixo, não mais este campo.
     empresa_id: Mapped[int | None] = mapped_column(
         ForeignKey("empresas.id"), nullable=True, index=True
     )
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+    empresas: Mapped[list["EmpresaModel"]] = relationship(
+        "EmpresaModel", secondary="usuario_empresas", lazy="selectin",
+    )
+
+
+class UsuarioEmpresaModel(Base):
+    """Vínculo M:N usuário↔empresa (login baseado em empresa, v6.11).
+
+    Fonte de verdade da autorização multi-tenant — `UserModel.empresa_id`
+    passa a servir só de empresa padrão/preferida (pré-seleção na tela de
+    login), não mais de checagem de acesso.
+    """
+    __tablename__ = "usuario_empresas"
+    __table_args__ = (
+        UniqueConstraint("usuario_id", "empresa_id", name="uq_usuario_empresa"),
+        {"extend_existing": True},
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    usuario_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
+    empresa_id: Mapped[int] = mapped_column(ForeignKey("empresas.id"), nullable=False, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
 
@@ -120,23 +145,63 @@ class CidadeModel(Base):
 
 
 class MetaNacionalModel(Base):
+    """Meta nacional (R$/kg e % Frete), por empresa-cliente."""
     __tablename__ = "meta_nacional"
-    __table_args__ = {"extend_existing": True}
+    __table_args__ = (
+        UniqueConstraint("empresa_id", name="uq_meta_nacional_empresa"),
+        {"extend_existing": True},
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    empresa_id: Mapped[int] = mapped_column(ForeignKey("empresas.id"), nullable=False, index=True)
     meta_rs_kg: Mapped[float] = mapped_column(Float, default=0.0)
     meta_pct_frete: Mapped[float] = mapped_column(Float, default=0.0)
 
 
 class MetaRegionalModel(Base):
+    """Meta por macrorregião (R$/kg, % Frete, prazo, orçamento), por empresa-cliente."""
     __tablename__ = "meta_regional"
-    __table_args__ = {"extend_existing": True}
+    __table_args__ = (
+        UniqueConstraint("empresa_id", "macro_regiao", name="uq_meta_regional_empresa_macro"),
+        {"extend_existing": True},
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    macro_regiao: Mapped[str] = mapped_column(String(15), unique=True, index=True)
+    empresa_id: Mapped[int] = mapped_column(ForeignKey("empresas.id"), nullable=False, index=True)
+    macro_regiao: Mapped[str] = mapped_column(String(15), index=True)
     meta_rs_kg: Mapped[float] = mapped_column(Float, default=0.0)
     meta_pct_frete: Mapped[float] = mapped_column(Float, default=0.0)
     prazo_medio_meta: Mapped[int] = mapped_column(Integer, default=0)
+    orcamento_mensal: Mapped[float] = mapped_column(Float, default=0.0)
+
+
+class FechamentoMensalModel(Base):
+    """Fechamento de Custo de Frete — um registro por empresa e competência.
+
+    Faturamento informado por região, devolução e complementar nacionais.
+    Frete realizado/budget não são persistidos aqui — vêm de CTeModel e
+    MetaRegionalModel a cada leitura (fonte única de verdade).
+    """
+    __tablename__ = "fechamento_mensal"
+    __table_args__ = (
+        UniqueConstraint("empresa_id", "competencia", name="uq_fechamento_mensal_empresa_competencia"),
+        {"extend_existing": True},
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    empresa_id: Mapped[int] = mapped_column(ForeignKey("empresas.id"), nullable=False, index=True)
+    competencia: Mapped[str] = mapped_column(String(7), index=True)  # "AAAA-MM"
+    fat_norte: Mapped[float] = mapped_column(Float, default=0.0)
+    fat_nordeste: Mapped[float] = mapped_column(Float, default=0.0)
+    fat_centro_oeste: Mapped[float] = mapped_column(Float, default=0.0)
+    fat_sudeste: Mapped[float] = mapped_column(Float, default=0.0)
+    fat_sul: Mapped[float] = mapped_column(Float, default=0.0)
+    devolucao: Mapped[float] = mapped_column(Float, default=0.0)
+    frete_complementar: Mapped[float] = mapped_column(Float, default=0.0)
+    status: Mapped[str] = mapped_column(String(10), default="ABERTO")
+    fechado_em: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    criado_em: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    atualizado_em: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
 
 
 class BenchmarkModel(Base):
@@ -220,12 +285,16 @@ class NFeModel(Base):
 # ══════════ Benchmark Logístico V2.1 — Modelo OD ══════════
 
 class HubLogisticoModel(Base):
-    """Catálogo global de hubs logísticos (vocabulário controlado)."""
+    """Catálogo de hubs logísticos, próprio de cada empresa-cliente."""
     __tablename__ = "hubs_logisticos"
-    __table_args__ = {"extend_existing": True}
+    __table_args__ = (
+        UniqueConstraint("empresa_id", "codigo", name="uq_hub_empresa_codigo"),
+        {"extend_existing": True},
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    codigo: Mapped[str] = mapped_column(String(40), unique=True, index=True)
+    empresa_id: Mapped[int] = mapped_column(ForeignKey("empresas.id"), nullable=False, index=True)
+    codigo: Mapped[str] = mapped_column(String(40), index=True)
     nome: Mapped[str] = mapped_column(String(120))
     descricao: Mapped[str] = mapped_column(String(255), default="")
     ativo: Mapped[bool] = mapped_column(Boolean, default=True)
@@ -247,14 +316,18 @@ class ClusterClienteModel(Base):
 
 
 class BenchmarkCorredorModel(Base):
-    """Referência de mercado global por corredor (Hub origem → Hub destino)."""
+    """Referência de mercado por corredor (Hub origem → Hub destino), por empresa."""
     __tablename__ = "benchmarks_corredor"
     __table_args__ = (
-        UniqueConstraint("hub_origem_codigo", "hub_destino_codigo", name="uq_corredor_origem_destino"),
+        UniqueConstraint(
+            "empresa_id", "hub_origem_codigo", "hub_destino_codigo",
+            name="uq_corredor_empresa_origem_destino",
+        ),
         {"extend_existing": True},
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    empresa_id: Mapped[int] = mapped_column(ForeignKey("empresas.id"), nullable=False, index=True)
     hub_origem_codigo: Mapped[str] = mapped_column(String(40), index=True)
     hub_destino_codigo: Mapped[str] = mapped_column(String(40), index=True)
     frete_kg_min: Mapped[float] = mapped_column(Float, default=0.0)
@@ -265,6 +338,7 @@ class BenchmarkCorredorModel(Base):
     frete_pct_max: Mapped[float] = mapped_column(Float, default=0.0)
     volume_referencia: Mapped[float] = mapped_column(Float, default=0.0)
     dispersao_kg: Mapped[float] = mapped_column(Float, default=0.0)
+    prazo_dias_medio: Mapped[float] = mapped_column(Float, default=0.0)
     observacoes: Mapped[str] = mapped_column(String(500), default="")
 
 
@@ -629,7 +703,7 @@ class BenchmarkMercadoModel(Base):
     __tablename__ = "benchmark_mercado"
     __table_args__ = (
         UniqueConstraint(
-            "origem_regiao", "destino_regiao", "modal", "tipo_operacao",
+            "origem_regiao", "destino_regiao", "modal", "tipo_operacao", "setor",
             "faixa_peso_min", "faixa_peso_max",
             name="uq_benchmark_mercado_od",
         ),
@@ -641,6 +715,11 @@ class BenchmarkMercadoModel(Base):
     destino_regiao: Mapped[str] = mapped_column(String(15), index=True)
     modal: Mapped[str] = mapped_column(String(20), default="")              # V2-ready (RODOVIARIO...)
     tipo_operacao: Mapped[str] = mapped_column(String(15), default="TODOS")  # FTL/LTL/FRACIONADO/TODOS
+    # Setor (segmento econômico) do embarcador pesquisado — mesmo vocabulário
+    # controlado de EmpresaModel.setor (SetorEnum). "TODOS" = referência
+    # genérica, sem segmentação (comportamento anterior a esta coluna,
+    # preservado como fallback — ver BenchmarkV2UseCase.resolver).
+    setor: Mapped[str] = mapped_column(String(40), default="TODOS", server_default="TODOS", index=True)
     faixa_peso_min: Mapped[float] = mapped_column(Float, default=0.0)
     faixa_peso_max: Mapped[float] = mapped_column(Float, default=0.0)        # 0 = sem teto
     rs_kg_p10: Mapped[float] = mapped_column(Float, default=0.0)
@@ -649,6 +728,11 @@ class BenchmarkMercadoModel(Base):
     rs_kg_p75: Mapped[float] = mapped_column(Float, default=0.0)
     rs_kg_p90: Mapped[float] = mapped_column(Float, default=0.0)
     fonte: Mapped[str] = mapped_column(String(20), default="MERCADO")
+    # Proveniência da pesquisa de mercado que sustenta esta linha — em
+    # branco/NULL para linhas legadas ou ainda não documentadas.
+    amostra_tamanho: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    metodologia: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
+    data_pesquisa: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
 
@@ -756,6 +840,7 @@ class DlgAnaliticoModel(Base):
     sinal_fragmentacao: ClassVar[Optional[bool]] = None
     causa_dominante: ClassVar[Optional[str]] = None
     causa_detalhe: ClassVar[Optional[dict]] = None
+    acao_recomendada: ClassVar[Optional[str]] = None
 
     __table_args__ = (
         UniqueConstraint("empresa_id", "dimensao", "chave", "periodo_ref",

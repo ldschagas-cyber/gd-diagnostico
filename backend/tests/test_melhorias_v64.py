@@ -94,7 +94,7 @@ def empresa_id(client, auth_headers):
     assert emp.status_code == 201
     eid = emp.json()["id"]
     # define metas nacionais (habilita desvios/recomendações)
-    client.put("/api/v1/metas/nacional", headers=auth_headers,
+    client.put(f"/api/v1/empresas/{eid}/metas/nacional", headers=auth_headers,
                json={"meta_rs_kg": 1.00, "meta_pct_frete": 2.5})
     # importa o CT-e
     files = [("arquivos", ("cte1.xml", CTE_XML.encode("utf-8"), "text/xml"))]

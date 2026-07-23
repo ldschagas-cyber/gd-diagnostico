@@ -21,10 +21,11 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.domain.entities import CTE_STATUS_ATIVO
-from app.infrastructure.database.models import BenchmarkMercadoModel, CTeModel
+from app.infrastructure.database.models import BenchmarkMercadoModel, CTeModel, TransportadoraModel
 from app.infrastructure.parsers.macro_regiao import macro_por_uf
 from app.application.use_cases.benchmark_v2 import BenchmarkV2UseCase, _pct
-from app.application.use_cases.benchmark_observado import BenchmarkObservadoUseCase
+from app.application.use_cases.benchmark_observado import BenchmarkObservadoUseCase, _percentil
+from app.application.use_cases.dlg import _ident_cliente
 
 _CENARIOS = {"P50": "rs_kg_p50", "P25": "rs_kg_p25", "P10": "rs_kg_p10"}
 
@@ -33,6 +34,11 @@ _CENARIOS = {"P50": "rs_kg_p50", "P25": "rs_kg_p25", "P10": "rs_kg_p10"}
 # adaptado à escala de CT-es em vez de segmentos).
 _CONFIAB_ALTA = 1000
 _CONFIAB_MEDIA = 100
+
+# Amostra mínima por cliente no escopo CLIENTE do Comparativo de Mercado —
+# abaixo disso o grupo não é descartado, só marcado `low_confidence` (mesmo
+# vocabulário do Benchmark Interno/MBL, THRESHOLD_AMOSTRA_PADRAO).
+_AMOSTRA_MIN_CLIENTE = 5
 
 
 def _regiao_od(cte: CTeModel) -> tuple[Optional[str], Optional[str]]:
@@ -105,11 +111,13 @@ class BenchmarkDashboardUseCase:
     def comparativo_mercado(
         self, empresa_id: int, escopo: str = "NACIONAL",
         data_inicio: Optional[date] = None, data_fim: Optional[date] = None,
+        busca: Optional[str] = None, limite: int = 50,
     ) -> list[dict]:
-        """``escopo``: NACIONAL | REGIAO | CORREDOR. Regenera o Benchmark
-        Observado do período sob o ``periodo_ref`` reservado "COMPAR"
-        (idempotente — reaproveita ``BenchmarkObservadoUseCase``, não
-        duplica o cálculo de percentil real do cliente).
+        """``escopo``: NACIONAL | REGIAO | CORREDOR | TRANSPORTADORA | CLIENTE.
+        Regenera o Benchmark Observado do período sob o ``periodo_ref``
+        reservado "COMPAR" (idempotente — reaproveita
+        ``BenchmarkObservadoUseCase``, não duplica o cálculo de percentil
+        real do cliente).
 
         Nota (bug corrigido em v6.9.3): o valor original "COMPARATIVO"
         (11 caracteres) excedia ``benchmark_observado.periodo_ref``
@@ -118,6 +126,11 @@ class BenchmarkDashboardUseCase:
         (a exceção interrompia o loop antes de gravar a linha NACIONAL
         também, mas o card de Confiabilidade/Cobertura, que não passa por
         este método, mascarava o erro ao continuar exibindo dado válido)."""
+        if escopo == "TRANSPORTADORA":
+            return self._comparativo_por_transportadora(empresa_id, data_inicio, data_fim)
+        if escopo == "CLIENTE":
+            return self._comparativo_por_cliente(empresa_id, data_inicio, data_fim, busca, limite)
+
         self.observado.gerar(empresa_id, periodo_ref="COMPAR", data_inicio=data_inicio, data_fim=data_fim)
         linhas = self.observado.listar(empresa_id, periodo_ref="COMPAR")
 
@@ -198,6 +211,113 @@ class BenchmarkDashboardUseCase:
             return []
         return [self._agregar_linha(itens, {"destino_regiao": "NACIONAL"})]
 
+    def _nomes_transportadoras(self, empresa_id: int) -> dict[int, str]:
+        rows = self.db.execute(
+            select(TransportadoraModel).where(TransportadoraModel.empresa_id == empresa_id)
+        ).scalars().all()
+        return {t.id: (t.nome_fantasia or t.razao_social) for t in rows}
+
+    def _comparativo_por_transportadora(
+        self, empresa_id: int, data_inicio: Optional[date] = None, data_fim: Optional[date] = None,
+    ) -> list[dict]:
+        """Escopo TRANSPORTADORA: percentis reais (P10-P90) do cliente por
+        transportadora, calculados direto do CT-e (a Matriz Benchmark não
+        segmenta por transportadora — é uma referência geográfica). Comparado
+        contra a referência NACIONAL, mesmo padrão já usado no bloco
+        "por_transportadora" do Simulador de Economia (``simulador_economia``
+        abaixo), só que aqui com a faixa P10-P90 completa em vez de 1 ponto."""
+        ctes = self._ctes(empresa_id, data_inicio, data_fim)
+        grupos: dict[int, list[float]] = defaultdict(list)
+        for c in ctes:
+            if not c.peso or c.peso <= 0 or not c.transportadora_id:
+                continue
+            grupos[c.transportadora_id].append(c.valor_frete / c.peso)
+
+        ref = self._referencia_nacional()
+        nomes = self._nomes_transportadoras(empresa_id)
+
+        itens = []
+        for tid, valores in grupos.items():
+            valores.sort()
+            cliente_p50 = _percentil(valores, 50)
+            itens.append({
+                "transportadora_id": tid,
+                "transportadora_nome": nomes.get(tid, f"Transportadora #{tid}"),
+                "qtd_ctes": len(valores),
+                "cliente_p10": _percentil(valores, 10), "cliente_p25": _percentil(valores, 25),
+                "cliente_p50": cliente_p50,
+                "cliente_p75": _percentil(valores, 75), "cliente_p90": _percentil(valores, 90),
+                "mercado_p10": ref.rs_kg_p10 if ref.disponivel else None,
+                "mercado_p25": ref.rs_kg_p25 if ref.disponivel else None,
+                "mercado_p50": ref.rs_kg_p50 if ref.disponivel else None,
+                "mercado_p75": ref.rs_kg_p75 if ref.disponivel else None,
+                "mercado_p90": ref.rs_kg_p90 if ref.disponivel else None,
+                "fonte_mercado": "MERCADO_NACIONAL" if ref.disponivel else "INDISPONIVEL",
+                "diferenca_pct": _pct(cliente_p50, ref.rs_kg_p50) if ref.disponivel else None,
+                "classificacao": BenchmarkV2UseCase.faixa_de(cliente_p50, ref.rs_kg_p50, ref.rs_kg_p75) if ref.disponivel else "SEM_REFERENCIA",
+            })
+        return sorted(itens, key=lambda i: i["qtd_ctes"], reverse=True)
+
+    def _comparativo_por_cliente(
+        self, empresa_id: int, data_inicio: Optional[date] = None, data_fim: Optional[date] = None,
+        busca: Optional[str] = None, limite: int = 50,
+    ) -> list[dict]:
+        """Escopo CLIENTE: percentis reais (P10-P90) do cliente (destinatário)
+        agrupados pela identidade RN-68 (``_ident_cliente``, reaproveitada do
+        DLG — raiz de 8 dígitos do CNPJ ou nome normalizado, nunca
+        reinventada aqui). Mesma justificativa já usada para TRANSPORTADORA:
+        cliente não tem segmentação geográfica na Matriz Benchmark, então a
+        comparação é sempre contra a referência NACIONAL.
+
+        Cardinalidade: pode haver centenas de clientes distintos. ``busca``
+        filtra por substring do nome ANTES do corte por ``limite``, para
+        sempre achar um cliente específico mesmo fora do top padrão (a lista
+        completa é ordenada por volume). Grupos com poucos CT-es não são
+        descartados — ficam marcados ``low_confidence=True`` (mesmo
+        vocabulário usado no Benchmark Interno/MBL)."""
+        ctes = self._ctes(empresa_id, data_inicio, data_fim)
+        grupos: dict[tuple, dict] = defaultdict(lambda: {"valores": [], "nome": None})
+        for c in ctes:
+            if not c.peso or c.peso <= 0:
+                continue
+            ident = _ident_cliente(c)
+            grupo = grupos[ident]
+            grupo["valores"].append(c.valor_frete / c.peso)
+            if not grupo["nome"] and c.destinatario_nome:
+                grupo["nome"] = c.destinatario_nome
+
+        ref = self._referencia_nacional()
+
+        itens = []
+        for (tipo, valor_ident), dados in grupos.items():
+            valores = sorted(dados["valores"])
+            nome = dados["nome"] or (valor_ident if tipo == "NOME" and valor_ident else None) or "Cliente não identificado"
+            cliente_p50 = _percentil(valores, 50)
+            itens.append({
+                "cliente_id": f"{tipo}:{valor_ident}" if valor_ident else "SEM_ID",
+                "cliente_nome": nome,
+                "qtd_ctes": len(valores),
+                "cliente_p10": _percentil(valores, 10), "cliente_p25": _percentil(valores, 25),
+                "cliente_p50": cliente_p50,
+                "cliente_p75": _percentil(valores, 75), "cliente_p90": _percentil(valores, 90),
+                "mercado_p10": ref.rs_kg_p10 if ref.disponivel else None,
+                "mercado_p25": ref.rs_kg_p25 if ref.disponivel else None,
+                "mercado_p50": ref.rs_kg_p50 if ref.disponivel else None,
+                "mercado_p75": ref.rs_kg_p75 if ref.disponivel else None,
+                "mercado_p90": ref.rs_kg_p90 if ref.disponivel else None,
+                "fonte_mercado": "MERCADO_NACIONAL" if ref.disponivel else "INDISPONIVEL",
+                "diferenca_pct": _pct(cliente_p50, ref.rs_kg_p50) if ref.disponivel else None,
+                "classificacao": BenchmarkV2UseCase.faixa_de(cliente_p50, ref.rs_kg_p50, ref.rs_kg_p75) if ref.disponivel else "SEM_REFERENCIA",
+                "low_confidence": len(valores) < _AMOSTRA_MIN_CLIENTE,
+            })
+
+        if busca:
+            termo = busca.strip().lower()
+            itens = [i for i in itens if termo in (i["cliente_nome"] or "").lower()]
+
+        itens.sort(key=lambda i: i["qtd_ctes"], reverse=True)
+        return itens[:limite]
+
     # ── Simulador de Economia (cenário P50/P25/P10) ────────────────────────
     def simulador_economia(
         self, empresa_id: int, cenario: str = "P50",
@@ -275,4 +395,7 @@ class BenchmarkDashboardUseCase:
             rs_kg_p10 = mapa.get("p10", 0.0)
             rs_kg_p25 = mapa.get("p25", 0.0)
             rs_kg_p50 = mapa.get("p50", 0.0)
+            rs_kg_p75 = mapa.get("p75", 0.0)
+            rs_kg_p90 = mapa.get("p90", 0.0)
+            disponivel = bool(mapa.get("p50"))
         return _Ref()

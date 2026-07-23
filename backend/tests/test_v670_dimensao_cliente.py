@@ -49,7 +49,8 @@ def db():
 def empresa_id(db):
     emp = EmpresaModel(razao_social="Empresa Teste", cnpj_matriz="11222333000181", setor="Outros")
     db.add(emp)
-    db.add(MetaNacionalModel(meta_rs_kg=1.00, meta_pct_frete=5.0))
+    db.flush()
+    db.add(MetaNacionalModel(empresa_id=emp.id, meta_rs_kg=1.00, meta_pct_frete=5.0))
     db.commit()
     return emp.id
 

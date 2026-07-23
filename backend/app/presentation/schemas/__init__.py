@@ -1,4 +1,5 @@
 """Schemas Pydantic (validação/serialização da API)."""
+import re
 from datetime import date, datetime
 from typing import List, Optional
 
@@ -60,7 +61,8 @@ class UserBase(BaseModel):
     email: EmailStr
     is_active: bool = True
     is_superuser: bool = False
-    empresa_id: Optional[int] = None      # multi-tenant (R-01)
+    empresa_id: Optional[int] = None      # empresa padrão/preferida (pré-seleção no login)
+    empresas_ids: List[int] = []          # vínculo real (M:N, v6.14) — fonte da autorização
     role: Optional[str] = None            # papel (R-04)
 
 
@@ -86,6 +88,7 @@ class UserUpdate(BaseModel):
     senha: Optional[str] = Field(default=None, min_length=6)
     is_active: Optional[bool] = None
     is_superuser: Optional[bool] = None
+    empresas_ids: Optional[List[int]] = None
 
 
 class UserOut(UserBase):
@@ -207,6 +210,7 @@ class MetaNacionalIn(BaseModel):
 
 class MetaNacionalOut(MetaNacionalIn):
     id: Optional[int] = None
+    empresa_id: Optional[int] = None
 
 
 class MetaRegionalIn(BaseModel):
@@ -214,10 +218,93 @@ class MetaRegionalIn(BaseModel):
     meta_rs_kg: float
     meta_pct_frete: float
     prazo_medio_meta: int = 0
+    orcamento_mensal: float = 0.0
 
 
 class MetaRegionalOut(MetaRegionalIn):
     id: Optional[int] = None
+    empresa_id: Optional[int] = None
+
+
+# ---------------- Fechamento Mensal (Fechamento de Custo de Frete) ---------
+_RE_COMPETENCIA = re.compile(r"^\d{4}-(0[1-9]|1[0-2])$")
+
+
+class FechamentoMensalIn(BaseModel):
+    competencia: str  # "AAAA-MM"
+    fat_norte: float = 0.0
+    fat_nordeste: float = 0.0
+    fat_centro_oeste: float = 0.0
+    fat_sudeste: float = 0.0
+    fat_sul: float = 0.0
+    devolucao: float = 0.0
+    frete_complementar: float = 0.0
+
+    @field_validator("competencia")
+    @classmethod
+    def _validar_competencia(cls, v: str) -> str:
+        if not _RE_COMPETENCIA.match(v):
+            raise ValueError("competencia deve estar no formato AAAA-MM")
+        return v
+
+
+class FechamentoAcaoIn(BaseModel):
+    """Body de /fechar e /reabrir — só a competência-alvo."""
+    competencia: str
+
+    @field_validator("competencia")
+    @classmethod
+    def _validar_competencia(cls, v: str) -> str:
+        if not _RE_COMPETENCIA.match(v):
+            raise ValueError("competencia deve estar no formato AAAA-MM")
+        return v
+
+
+class FechamentoRegionalOut(BaseModel):
+    macro_regiao: MacroRegiaoEnum
+    fat_real: float
+    frete_real: float
+    pct_frete_fat_real: float
+    fat_budget: float
+    frete_budget: float
+    pct_frete_fat_budget: float
+    representatividade_real: float
+    representatividade_budget: float
+
+
+class FechamentoRegionalTotalOut(BaseModel):
+    fat_real: float
+    frete_real: float
+    pct_frete_fat_real: float
+    fat_budget: float
+    frete_budget: float
+    pct_frete_fat_budget: float
+
+
+class FechamentoMensalOut(BaseModel):
+    competencia: str
+    status: str
+    fechado_em: Optional[datetime] = None
+    fat_norte: float
+    fat_nordeste: float
+    fat_centro_oeste: float
+    fat_sudeste: float
+    fat_sul: float
+    devolucao: float
+    frete_complementar: float
+    faturamento_total: float
+    frete_contratado: float
+    regional: List[FechamentoRegionalOut]
+    regional_total: FechamentoRegionalTotalOut
+
+
+class FechamentoHistoricoItemOut(BaseModel):
+    competencia: str
+    status: str
+    faturamento_total: float
+    devolucao: float
+    frete_complementar: float
+    frete_contratado: float
 
 
 # ---------------- Benchmark (Módulo Benchmark Logístico) ----------------
@@ -241,6 +328,7 @@ class ResultadoImportacaoOut(BaseModel):
     ignorados_sem_vinculo: int
     duplicados: int
     atualizados: int = 0
+    sem_identificador: int = 0
     total_processados: int
     erros: List[str]
 
@@ -301,6 +389,66 @@ class CancelamentoLogOut(BaseModel):
     arquivo: str
     created_at: Optional[datetime]
 
+
+# ---------------- Carta de Correção de CT-e — CCe (v6.11) ----------------
+class OcorrenciaCCeOut(BaseModel):
+    arquivo: str
+    chave: str
+    resultado: str      # REGISTRADA | DUPLICADO | NAO_ENCONTRADO | ERRO
+    mensagem: str
+
+
+class ResultadoCCeOut(BaseModel):
+    total_processados: int
+    registradas: int
+    duplicados: int
+    nao_encontrados: int
+    erros: int
+    ocorrencias: List[OcorrenciaCCeOut]
+
+
+# ---------------- Importação unificada de CT-e + cancelamento (v6.11) ----------------
+class ResultadoImportacaoCteOut(BaseModel):
+    """Resultado combinado do upload de um lote de XMLs de CT-e.
+
+    O lote pode conter, ao mesmo tempo, XMLs de CT-e, XMLs de evento de
+    cancelamento e XMLs de Carta de Correção (CCe) — cada arquivo é
+    classificado automaticamente pelo conteúdo e roteado para o caso de uso
+    correspondente. CCe nunca é aplicada automaticamente ao CT-e, apenas
+    registrada para revisão manual (ver `carta_correcao`).
+    """
+    importacao: ResultadoImportacaoOut
+    cancelamento: ResultadoCancelamentoOut
+    carta_correcao: ResultadoCCeOut
+
+
+# ---------------- Grid de CT-e individuais (v6.11) ----------------
+class CteListaItemOut(BaseModel):
+    id: int
+    chave: str
+    numero: str
+    serie: str
+    data_emissao: Optional[date]
+    transportadora_nome: Optional[str] = None
+    municipio_origem: str
+    uf_origem: str
+    municipio_destino: str
+    uf_destino: str
+    peso: float
+    valor_frete: float
+    status: str
+    origem_importacao: str
+    cancelado_em: Optional[date]
+
+
+class CteListaPaginadaOut(BaseModel):
+    items: List[CteListaItemOut]
+    total: int
+
+
+class ExcluirCtesIn(BaseModel):
+    ids: List[int]
+
     class Config:
         from_attributes = True
 
@@ -318,6 +466,7 @@ class RecomendacaoOut(BaseModel):
     prioridade: str      # CRITICA | ALTA | MEDIA | BAIXA
     origem: str          # REGRA | IA
     status: str          # ABERTA | EM_ANDAMENTO | CONCLUIDA | DESCARTADA
+    dados: Optional[dict] = None  # extra por tipo de recomendação — ex.: {"acao_recomendada": "..."}
 
     class Config:
         from_attributes = True
@@ -355,6 +504,8 @@ class IndicadorNacionalOut(BaseModel):
     ref_pct_ideal_max: Optional[float] = None
     ref_pct_mercado_min: Optional[float] = None
     ref_pct_mercado_max: Optional[float] = None
+    # Meta mensal de orçamento nacional (v6.12) — indicador "Evolução mensal de frete"
+    orcamento_mensal: Optional[float] = None
 
 
 class IndicadorRegionalOut(BaseModel):
@@ -367,6 +518,11 @@ class IndicadorRegionalOut(BaseModel):
     meta_rs_kg: Optional[float]
     meta_pct: Optional[float]
     qtd_ctes: int
+    # Orçamento mensal (R$) da Meta Regional e seu equivalente multiplicado
+    # pelos meses do período filtrado (None quando não há filtro de período
+    # ou a região não tem orçamento mensal configurado).
+    orcamento_mensal: Optional[float] = None
+    orcamento_periodo: Optional[float] = None
 
 
 class IndicadorTransportadoraOut(BaseModel):
@@ -392,12 +548,13 @@ class IndicadorPrazoOut(BaseModel):
 
 
 class EvolucaoFreteOut(BaseModel):
-    """Ponto mensal de evolução (sparkline do card + gráficos de Frete Total
-    e % Frete/Mercadoria do dashboard)."""
+    """Ponto mensal de evolução (sparkline do card + gráficos de Frete Total,
+    % Frete/Mercadoria e Frete por Kg do dashboard)."""
     model_config = ConfigDict(from_attributes=True)
     mes: str
     frete_total: float
     frete_pct: float = 0.0
+    frete_rs_kg: float = 0.0
 
 
 class DiagnosticoOut(BaseModel):
@@ -526,6 +683,7 @@ class HubLogisticoIn(BaseModel):
 class HubLogisticoOut(HubLogisticoIn):
     model_config = ConfigDict(from_attributes=True)
     id: Optional[int] = None
+    empresa_id: Optional[int] = None
 
 
 class ClusterClienteIn(BaseModel):
@@ -556,12 +714,14 @@ class BenchmarkCorredorIn(BaseModel):
     frete_pct_max: float = 0.0
     volume_referencia: float = 0.0
     dispersao_kg: float = 0.0
+    prazo_dias_medio: float = 0.0
     observacoes: str = ""
 
 
 class BenchmarkCorredorOut(BenchmarkCorredorIn):
     model_config = ConfigDict(from_attributes=True)
     id: Optional[int] = None
+    empresa_id: Optional[int] = None
 
 
 class BenchmarkCorredorItemOut(BaseModel):
@@ -611,6 +771,51 @@ class EconomiaCorredorOut(BaseModel):
     benchmark_medio: float
     tem_referencia: bool
     economia: float
+
+
+# ══════════ Simulador de Hub de Origem ══════════
+class SimulacaoHubRotaOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    hub_destino: str
+    hub_destino_nome: str
+    qtd_ctes: int
+    peso_total: float
+    frete_atual_total: float
+    frete_atual_rs_kg: float
+    tem_referencia_alt: bool
+    frete_simulado_rs_kg: float
+    frete_simulado_total: float
+    delta_custo_pct: float
+    prazo_atual_dias: Optional[float] = None
+    amostra_prazo_atual: int
+    prazo_simulado_dias: Optional[float] = None
+    delta_prazo_dias: Optional[float] = None
+    baixa_confianca: bool
+    recomendacao: str
+
+
+class SimulacaoHubResultadoOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    hub_atual: str
+    hub_atual_nome: str
+    hub_alt: str
+    hub_alt_nome: str
+    periodo_inicio: Optional[str] = None
+    periodo_fim: Optional[str] = None
+    opera_no_hub_atual: bool
+    rotas: List[SimulacaoHubRotaOut]
+    qtd_rotas: int
+    rotas_com_referencia: int
+    rotas_sem_referencia: int
+    rotas_com_ganho: int
+    rotas_com_perda: int
+    frete_atual_total: float
+    frete_comparavel_total: float
+    frete_simulado_total: float
+    delta_custo_total_pct: float
+    prazo_atual_medio_dias: Optional[float] = None
+    prazo_simulado_medio_dias: Optional[float] = None
+    nota: str
 
 
 # ═══════════════════════════════════════════════════════════════

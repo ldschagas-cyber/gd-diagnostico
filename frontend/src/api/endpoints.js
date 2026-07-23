@@ -96,12 +96,30 @@ export const cidadesApi = {
   },
 };
 
-// -------------------------------- Metas ---------------------------------
+// -------------------------------- Metas (por empresa) -------------------
 export const metasApi = {
-  obterNacional: () => api.get("/metas/nacional").then((r) => r.data),
-  salvarNacional: (payload) => api.put("/metas/nacional", payload).then((r) => r.data),
-  listarRegionais: () => api.get("/metas/regionais").then((r) => r.data),
-  salvarRegional: (payload) => api.put("/metas/regionais", payload).then((r) => r.data),
+  obterNacional: (empresaId) =>
+    api.get(`/empresas/${empresaId}/metas/nacional`).then((r) => r.data),
+  salvarNacional: (empresaId, payload) =>
+    api.put(`/empresas/${empresaId}/metas/nacional`, payload).then((r) => r.data),
+  listarRegionais: (empresaId) =>
+    api.get(`/empresas/${empresaId}/metas/regionais`).then((r) => r.data),
+  salvarRegional: (empresaId, payload) =>
+    api.put(`/empresas/${empresaId}/metas/regionais`, payload).then((r) => r.data),
+};
+
+// --------------------- Fechamento de Custo de Frete ----------------------
+export const fechamentoApi = {
+  obter: (empresaId, competencia) =>
+    api.get(`/empresas/${empresaId}/fechamento-mensal`, { params: { competencia } }).then((r) => r.data),
+  salvar: (empresaId, payload) =>
+    api.put(`/empresas/${empresaId}/fechamento-mensal`, payload).then((r) => r.data),
+  fechar: (empresaId, competencia) =>
+    api.post(`/empresas/${empresaId}/fechamento-mensal/fechar`, { competencia }).then((r) => r.data),
+  reabrir: (empresaId, competencia) =>
+    api.post(`/empresas/${empresaId}/fechamento-mensal/reabrir`, { competencia }).then((r) => r.data),
+  historico: (empresaId, limite = 13) =>
+    api.get(`/empresas/${empresaId}/fechamento-mensal/historico`, { params: { limite } }).then((r) => r.data),
 };
 
 // ------------------------------ Importação ------------------------------
@@ -162,6 +180,18 @@ export const importacaoApi = {
       .delete(`/importacao/dados/${empresaId}`, { params })
       .then((r) => r.data);
   },
+  listarCtes: (empresaId, { page = 1, pageSize = 25, status, origem } = {}) => {
+    const params = { page, page_size: pageSize };
+    if (status) params.status = status;
+    if (origem) params.origem = origem;
+    return api
+      .get(`/importacao/dados/${empresaId}/ctes`, { params })
+      .then((r) => r.data);
+  },
+  excluirCtesPorIds: (empresaId, ids) =>
+    api
+      .delete(`/importacao/dados/${empresaId}/ctes`, { data: { ids } })
+      .then((r) => r.data),
 };
 
 // ------------------------------ Dashboard -------------------------------
@@ -189,6 +219,8 @@ export const recomendacoesApi = {
 };
 
 // ------------------------------ Relatórios ------------------------------
+const EXT_FORMATO = { html: "html", pdf: "pdf", excel: "xlsx" };
+
 export const relatoriosApi = {
   baixar: async (empresaId, formato, params = {}) => {
     const { data, headers } = await api.get(
@@ -196,10 +228,24 @@ export const relatoriosApi = {
       { params, responseType: "blob" }
     );
     const url = window.URL.createObjectURL(new Blob([data]));
-    const ext = formato === "excel" ? "xlsx" : "pdf";
     const link = document.createElement("a");
     link.href = url;
-    link.download = `diagnostico_frete_${empresaId}.${ext}`;
+    link.download = `diagnostico_frete_${empresaId}.${EXT_FORMATO[formato] || formato}`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+    return headers;
+  },
+  baixarFechamento: async (empresaId, formato, competencia) => {
+    const { data, headers } = await api.get(
+      `/relatorios/fechamento/${empresaId}/${formato}`,
+      { params: { competencia }, responseType: "blob" }
+    );
+    const url = window.URL.createObjectURL(new Blob([data]));
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `fechamento_${empresaId}_${competencia}.${EXT_FORMATO[formato] || formato}`;
     document.body.appendChild(link);
     link.click();
     link.remove();
@@ -244,14 +290,20 @@ benchmarkApi.simuladorEconomia = (empresaId, params = {}) =>
 benchmarkApi.indicadoresMercado = (empresaId, params = {}) =>
   api.get(`/benchmark/indicadores-mercado/${empresaId}`, { params }).then((r) => r.data);
 
+// Simulador de Hub de Origem — custo/prazo real (hub atual) vs. referência de
+// mercado (hub alternativo), por corredor. params: { hub_atual, hub_alt, data_inicio?, data_fim? }
+benchmarkApi.simuladorHub = (empresaId, params = {}) =>
+  api.get(`/benchmark/simulador-hub/${empresaId}`, { params }).then((r) => r.data);
+
 // ------------------------- Benchmark OD: cadastros -------------------------
-// Catálogo global de hubs logísticos
+// Catálogo de hubs logísticos, próprio de cada empresa-cliente
 export const hubsApi = {
-  listar: (apenasAtivos = false) =>
-    api.get("/hubs", { params: { apenas_ativos: apenasAtivos } }).then((r) => r.data),
-  criar: (payload) => api.post("/hubs", payload).then((r) => r.data),
-  atualizar: (id, payload) => api.put(`/hubs/${id}`, payload).then((r) => r.data),
-  remover: (id) => api.delete(`/hubs/${id}`).then((r) => r.data),
+  listar: (empresaId, apenasAtivos = false) =>
+    api.get(`/empresas/${empresaId}/hubs`, { params: { apenas_ativos: apenasAtivos } }).then((r) => r.data),
+  criar: (empresaId, payload) => api.post(`/empresas/${empresaId}/hubs`, payload).then((r) => r.data),
+  atualizar: (empresaId, id, payload) =>
+    api.put(`/empresas/${empresaId}/hubs/${id}`, payload).then((r) => r.data),
+  remover: (empresaId, id) => api.delete(`/empresas/${empresaId}/hubs/${id}`).then((r) => r.data),
 };
 
 // Mapa UF/município → hub, por empresa-cliente
@@ -284,11 +336,31 @@ export const clustersApi = {
   },
 };
 
-// Referência de mercado por corredor (global, admin)
+// Referência de mercado por corredor, por empresa-cliente
 export const corredoresApi = {
-  listar: () => api.get("/benchmarks-corredor").then((r) => r.data),
-  salvar: (payload) => api.put("/benchmarks-corredor", payload).then((r) => r.data),
-  remover: (id) => api.delete(`/benchmarks-corredor/${id}`).then((r) => r.data),
+  listar: (empresaId) => api.get(`/empresas/${empresaId}/corredores`).then((r) => r.data),
+  salvar: (empresaId, payload) =>
+    api.put(`/empresas/${empresaId}/corredores`, payload).then((r) => r.data),
+  remover: (empresaId, id) =>
+    api.delete(`/empresas/${empresaId}/corredores/${id}`).then((r) => r.data),
+  baixarModelo: async (empresaId) => {
+    const { data } = await api.get(`/empresas/${empresaId}/corredores/modelo`, { responseType: "blob" });
+    const url = window.URL.createObjectURL(new Blob([data]));
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "modelo_corredores.xlsx";
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+  },
+  importarExcel: (empresaId, file) => {
+    const fd = new FormData();
+    fd.append("arquivo", file);
+    return api
+      .post(`/empresas/${empresaId}/corredores/importar`, fd, { headers: { "Content-Type": "multipart/form-data" } })
+      .then((r) => r.data);
+  },
 };
 
 // Benchmark V2 — Matriz OD de mercado (source of truth, global, admin)
@@ -296,16 +368,34 @@ export const mercadoApi = {
   listar: (params = {}) => api.get("/benchmark-v2/mercado", { params }).then((r) => r.data),
   salvar: (payload) => api.put("/benchmark-v2/mercado", payload).then((r) => r.data),
   remover: (id) => api.delete(`/benchmark-v2/mercado/${id}`).then((r) => r.data),
+  baixarModelo: async () => {
+    const { data } = await api.get("/benchmark-v2/mercado/modelo", { responseType: "blob" });
+    const url = window.URL.createObjectURL(new Blob([data]));
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "modelo_matriz_benchmark.xlsx";
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+  },
+  importarExcel: (file) => {
+    const fd = new FormData();
+    fd.append("arquivo", file);
+    return api
+      .post("/benchmark-v2/mercado/importar", fd, { headers: { "Content-Type": "multipart/form-data" } })
+      .then((r) => r.data);
+  },
 };
 
-// Download de relatório de Benchmark (PDF/Excel consolidado).
+// Download de relatório de Benchmark (PDF/HTML consolidado).
 relatoriosApi.baixarBenchmark = async (empresaId, formato, params = {}) => {
   const { data, headers } = await api.get(
     `/relatorios/benchmark/${empresaId}/${formato}`,
     { params, responseType: "blob" }
   );
   const url = window.URL.createObjectURL(new Blob([data]));
-  const ext = formato === "excel" ? "xlsx" : "pdf";
+  const ext = EXT_FORMATO[formato] || formato;
   const link = document.createElement("a");
   link.href = url;
   link.download = `benchmark_${empresaId}.${ext}`;
@@ -376,8 +466,9 @@ export const bidApi = {
   baixarRelatorio: async (id, empresaId, tipo, formato) => {
     const r = await api.get(`/relatorios/bid/${id}/${tipo}/${formato}`, { params: { empresa_id: empresaId }, responseType: "blob" });
     const url = window.URL.createObjectURL(new Blob([r.data]));
+    const ext = formato === "excel" ? "xlsx" : formato === "html" ? "html" : "pdf";
     const a = document.createElement("a"); a.href = url;
-    a.download = `bid_${id}_${tipo}.${formato === "excel" ? "xlsx" : "pdf"}`;
+    a.download = `bid_${id}_${tipo}.${ext}`;
     document.body.appendChild(a); a.click(); a.remove(); window.URL.revokeObjectURL(url);
   },
 };

@@ -1,12 +1,15 @@
 """Router de empresas (RF002) e filiais (RF003)."""
 from fastapi import APIRouter, Depends, HTTPException
 
-from app.domain.entities import Empresa, Filial, StatusEnum
+from app.domain.entities import Empresa, Filial, MacroRegiaoEnum, MetaNacional, MetaRegional, StatusEnum
+from app.domain.repositories import IMetaNacionalRepository, IMetaRegionalRepository
 from app.presentation.api.dependencies import (
     bloquear_visualizador,
     get_current_user,
     get_empresa_repo,
     get_filial_repo,
+    get_meta_nacional_repo,
+    get_meta_regional_repo,
     require_admin,
     verificar_acesso_empresa,
 )
@@ -21,16 +24,36 @@ from app.presentation.schemas import (
 router = APIRouter(prefix="/empresas", tags=["Empresas e Filiais"])
 
 
+def seed_metas_padroes(
+    empresa_id: int,
+    meta_nac_repo: IMetaNacionalRepository,
+    meta_reg_repo: IMetaRegionalRepository,
+) -> None:
+    """Cria as metas (nacional + 5 regionais) zeradas para uma empresa nova.
+
+    Metas são por-empresa (v6.13) — cada cliente nasce sem meta configurada
+    e precisa parametrizar a sua própria, sem herdar valor de outro cliente.
+    """
+    meta_nac_repo.upsert(MetaNacional(empresa_id=empresa_id, meta_rs_kg=0.0, meta_pct_frete=0.0))
+    for macro in MacroRegiaoEnum:
+        meta_reg_repo.upsert(MetaRegional(
+            empresa_id=empresa_id, macro_regiao=macro,
+            meta_rs_kg=0.0, meta_pct_frete=0.0, prazo_medio_meta=0, orcamento_mensal=0.0,
+        ))
+
+
 # ---------------- Empresas (RF002) ----------------
 @router.get("", response_model=list[EmpresaOut])
 def listar(user=Depends(get_current_user), repo=Depends(get_empresa_repo)):
     todas = repo.list()
-    # Multi-tenant (R-01): admin global vê todas; usuário comum vê só a sua.
+    # Multi-tenant (R-01): admin global vê todas; usuário comum vê as empresas
+    # a que está vinculado (login baseado em empresa, v6.14 — usuario_empresas).
     role = getattr(user, "role", None)
     eh_admin = user.is_superuser or (getattr(role, "value", role) == "ADMIN")
     if eh_admin and user.empresa_id is None:
         return todas
-    return [e for e in todas if e.id == user.empresa_id]
+    vinculadas = set(getattr(user, "empresas_ids", None) or [])
+    return [e for e in todas if e.id in vinculadas]
 
 
 @router.get("/{empresa_id}", response_model=EmpresaOut)
@@ -39,10 +62,18 @@ def obter(empresa=Depends(verificar_acesso_empresa)):
 
 
 @router.post("", response_model=EmpresaOut, status_code=201)
-def criar(payload: EmpresaCreate, _=Depends(require_admin), repo=Depends(get_empresa_repo)):
+def criar(
+    payload: EmpresaCreate,
+    _=Depends(require_admin),
+    repo=Depends(get_empresa_repo),
+    meta_nac_repo=Depends(get_meta_nacional_repo),
+    meta_reg_repo=Depends(get_meta_regional_repo),
+):
     if repo.get_by_cnpj(payload.cnpj_matriz):
         raise HTTPException(409, "CNPJ de matriz já cadastrado")
-    return repo.create(Empresa(**payload.model_dump()))
+    nova = repo.create(Empresa(**payload.model_dump()))
+    seed_metas_padroes(nova.id, meta_nac_repo, meta_reg_repo)
+    return nova
 
 
 @router.put("/{empresa_id}", response_model=EmpresaOut)

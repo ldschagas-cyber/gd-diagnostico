@@ -49,14 +49,18 @@ const COR_CAUSA = {
   NENHUMA: GD.slate,
 };
 
-// Rankings da dimensão Cliente (PRD §8) — os 5 já existentes primeiro, os 2
-// novos ao final. Ordenação aplicada sobre a página carregada.
-const RANKINGS_CLIENTE = [
+// Rankings comuns às 5 dimensões — campos presentes em qualquer linha do
+// analítico (Filial, Rota, Transportadora, Região e Cliente).
+const RANKINGS_COMUNS = [
   { v: "frete_total", l: "Maior custo de frete" },
   { v: "pct_frete", l: "Maior % frete" },
   { v: "rs_kg", l: "Maior R$/Kg" },
-  { v: "impacto", l: "Maior impacto financeiro potencial" },
   { v: "peso_total", l: "Maior volume movimentado" },
+];
+// Rankings exclusivos da dimensão Cliente (PRD §8) — dependem de campos só
+// calculados nessa dimensão (impacto financeiro, composição, fragmentação).
+const RANKINGS_SO_CLIENTE = [
+  { v: "impacto", l: "Maior impacto financeiro potencial" },
   { v: "adicionais", l: "Maior % de componentes adicionais" },
   { v: "fragmentacao", l: "Maior sinal de fragmentação" },
 ];
@@ -198,6 +202,11 @@ function PainelDiagnosticoCliente({ row }) {
                 "{texto}"
               </Typography>
             )}
+            {row.acao_recomendada && (
+              <Typography variant="body2" sx={{ mt: 0.75, p: 1, bgcolor: GD.ivoryDeep, borderRadius: 1 }}>
+                <strong style={{ color: GD.ok }}>O que fazer:</strong> {row.acao_recomendada}
+              </Typography>
+            )}
             {row.classificacao === "EFICIENTE" && (
               <Typography variant="body2" color="text.secondary">
                 Este cliente está dentro do benchmark; nenhum diagnóstico causal aplicável.
@@ -251,15 +260,15 @@ export default function DiagnosticoDLG() {
   const { empresaAtivaId } = useEmpresa();
   const { sucesso, erro: erroToast } = useFeedback();
 
-  // Estado de tela persistente (dimensão + modo de visualização + período)
+  // Estado de tela persistente (dimensão + período). Visão mensal removida
+  // (v6.10.x) — a tela opera sempre em modo consolidado (1 linha/entidade).
   const [tela, , patchTela] = useTelaEstado("dlg", {
     dimensao: "FILIAL",
-    modo: "consolidado",   // abre em Consolidado por padrão
     classifFiltro: "TODAS", // filtro de classificação da análise por dimensão
     dataInicio: "",
     dataFim: "",
   });
-  const { dimensao, modo, classifFiltro, dataInicio, dataFim } = tela;
+  const { dimensao, classifFiltro, dataInicio, dataFim } = tela;
   const setDataInicio = (v) => patchTela({ dataInicio: v });
   const setDataFim = (v) => patchTela({ dataFim: v });
 
@@ -272,16 +281,29 @@ export default function DiagnosticoDLG() {
   // cardinalidade potencial das 5).
   const ehCliente = dimensao === "CLIENTE_FINAL";
   const [expandidos, setExpandidos] = useState(() => new Set());
-  const [rankingCliente, setRankingCliente] = useState("frete_total");
+  const [ranking, setRanking] = useState("frete_total");
   const [paginaCliente, setPaginaCliente] = useState(1);
 
-  useEffect(() => { setPaginaCliente(1); setExpandidos(new Set()); }, [dimensao, modo, classifFiltro, dataInicio, dataFim]);
+  // Aba Outliers: filtro por tipo + busca por CT-e são client-side (a rota
+  // /dlg/{id}/outliers já traz a lista inteira do período de uma vez);
+  // a paginação aqui só corta a exibição, não refaz a chamada à API.
+  const [tipoOutlierFiltro, setTipoOutlierFiltro] = useState("ALL");
+  const [buscaCte, setBuscaCte] = useState("");
+  const [paginaOutliers, setPaginaOutliers] = useState(1);
+  const [pageSizeOutliers, setPageSizeOutliers] = useState(20);
+
+  useEffect(() => { setPaginaCliente(1); setExpandidos(new Set()); }, [dimensao, classifFiltro, dataInicio, dataFim]);
+  useEffect(() => { setPaginaOutliers(1); }, [tipoOutlierFiltro, buscaCte, dataInicio, dataFim]);
+  // Ao trocar de dimensão, volta ao ranking padrão — evita ficar com uma opção
+  // exclusiva de Cliente (impacto/adicionais/fragmentação) selecionada numa
+  // dimensão que não tem esses campos.
+  useEffect(() => { setRanking("frete_total"); }, [dimensao]);
 
   // O intervalo de datas filtra a visualização (KPIs, cards, tabela e outliers).
   const periodo = {};
   if (dataInicio) periodo.data_inicio = dataInicio;
   if (dataFim) periodo.data_fim = dataFim;
-  const paramsAnalitico = { dimensao, modo, ...periodo };
+  const paramsAnalitico = { dimensao, ...periodo };
   if (ehCliente) {
     // CA-16: filtro de classificação e paginação aplicados server-side
     // para Cliente — evita baixar a listagem inteira de destinatários.
@@ -297,6 +319,20 @@ export default function DiagnosticoDLG() {
   const carregando = carregandoResumo || carregandoAnalitico || carregandoOutliers;
   const erroCarregamento = erroResumo || erroAnalitico || erroOutliers;
   if (erroCarregamento) erroToast(extrairErro(erroCarregamento));
+
+  const contagemPctFrete = useMemo(() => outliers.filter((o) => o.tipo_outlier === "PCT_FRETE").length, [outliers]);
+  const contagemRsKg = useMemo(() => outliers.filter((o) => o.tipo_outlier === "RS_KG_2DP").length, [outliers]);
+  const outliersFiltrados = useMemo(() => outliers.filter((o) => {
+    if (tipoOutlierFiltro !== "ALL" && o.tipo_outlier !== tipoOutlierFiltro) return false;
+    if (buscaCte && !String(o.cte_id).includes(buscaCte)) return false;
+    return true;
+  }), [outliers, tipoOutlierFiltro, buscaCte]);
+  const totalPaginasOutliers = Math.max(1, Math.ceil(outliersFiltrados.length / pageSizeOutliers));
+  const paginaOutliersClamped = Math.min(paginaOutliers, totalPaginasOutliers);
+  const outliersPagina = useMemo(() => {
+    const inicio = (paginaOutliersClamped - 1) * pageSizeOutliers;
+    return outliersFiltrados.slice(inicio, inicio + pageSizeOutliers);
+  }, [outliersFiltrados, paginaOutliersClamped, pageSizeOutliers]);
 
   const processar = async () => {
     if (!empresaAtivaId) return;
@@ -315,11 +351,8 @@ export default function DiagnosticoDLG() {
     }
   };
 
-  const consolidado = modo === "consolidado";
-
   // Distribuição de eficiência dos cards: calculada sobre o total de registros
-  // da dimensão exibida, no modo atual (entidades no consolidado; linhas
-  // entidade×mês no mensal). Sempre coerente com a tabela abaixo.
+  // da dimensão exibida. Sempre coerente com a tabela abaixo.
   // Para Cliente (paginado — CA-16), a tabela só carrega 1 página por vez;
   // a distribuição usa o total real da dimensão vindo de `resumo.por_dimensao`
   // (já calculado sobre todos os clientes do período, sem paginação).
@@ -347,31 +380,30 @@ export default function DiagnosticoDLG() {
     return analitico.filter((r) => r.classificacao === classifFiltro);
   }, [analitico, classifFiltro, ehCliente]);
 
-  // Ranking da dimensão Cliente (PRD §8) — ordenação client-side sobre a
-  // página carregada. "Maior sinal de fragmentação" filtra implicitamente
-  // (PRD §8/Protótipo C.4).
+  // Ranking (PRD §8) — ordenação client-side sobre a página/linhas carregadas,
+  // aplicada às 5 dimensões. "Maior sinal de fragmentação" (só Cliente) filtra
+  // implicitamente (PRD §8/Protótipo C.4).
   const linhasTabela = useMemo(() => {
-    if (!ehCliente) return linhasTabelaBase;
     const linhas = [...linhasTabelaBase];
-    switch (rankingCliente) {
+    switch (ranking) {
       case "pct_frete": return linhas.sort((a, b) => (b.pct_frete || 0) - (a.pct_frete || 0));
       case "rs_kg": return linhas.sort((a, b) => (b.rs_kg || 0) - (a.rs_kg || 0));
-      case "impacto": return linhas.sort((a, b) => (b.impacto_financeiro_potencial || 0) - (a.impacto_financeiro_potencial || 0));
       case "peso_total": return linhas.sort((a, b) => (b.peso_total || 0) - (a.peso_total || 0));
+      case "impacto": return linhas.sort((a, b) => (b.impacto_financeiro_potencial || 0) - (a.impacto_financeiro_potencial || 0));
       case "adicionais": return linhas.sort((a, b) => (b.pct_componentes_adicionais || 0) - (a.pct_componentes_adicionais || 0));
       case "fragmentacao": return linhas
         .filter((r) => r.sinal_fragmentacao)
         .sort((a, b) => (b.impacto_financeiro_potencial || 0) - (a.impacto_financeiro_potencial || 0));
       default: return linhas.sort((a, b) => (b.frete_total || 0) - (a.frete_total || 0));
     }
-  }, [linhasTabelaBase, ehCliente, rankingCliente]);
+  }, [linhasTabelaBase, ranking]);
 
   const rotuloDim = DIMENSOES.find((d) => d.v === dimensao)?.l || dimensao;
 
   return (
     <Box>
       <PageHeader
-        titulo="Diagnóstico Logístico"
+        titulo="Análise de Eficiência"
         subtitulo="Eficiência por filial, rota, transportadora e região — com detecção de outliers"
       />
 
@@ -426,69 +458,56 @@ export default function DiagnosticoDLG() {
               (exclui CT-e com peso/mercadoria = 0), com risco de mostrar um
               número diferente do Dashboard para o "mesmo" indicador. */}
 
-          {/* ── Controles: dimensão + classificação (esquerda) | modo (direita) ──
-               Layout aprovado no mock: uma única linha. O filtro de Classificação
-               usa o MESMO componente do filtro "Prioridade" (tela Recomendações).
-               Os botões de dimensão e modo têm largura mínima uniforme para
-               ficarem do tamanho do botão "Consolidado". */}
+          {/* ── Controles: dimensão + classificação + ordenação, uma única linha ──
+               Visão mensal removida — a tela opera sempre em modo consolidado.
+               O filtro de Classificação usa o MESMO componente do filtro
+               "Prioridade" (tela Recomendações). */}
           <Stack
-            direction={{ xs: "column", md: "row" }} spacing={1.5}
-            justifyContent="space-between" alignItems={{ md: "center" }} sx={{ mb: 1.5 }}
+            direction={{ xs: "column", sm: "row" }} spacing={1.5} alignItems={{ sm: "center" }}
+            flexWrap="wrap" useFlexGap sx={{ mb: 1.5 }}
           >
-            <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5} alignItems={{ sm: "center" }} flexWrap="wrap" useFlexGap>
-              <ToggleButtonGroup
-                size="small" exclusive value={dimensao}
-                onChange={(_, v) => v && patchTela({ dimensao: v })}
-                sx={{ "& .MuiToggleButton-root": { height: 40, minWidth: 116 } }}
-              >
-                {DIMENSOES.map((d) => (
-                  <ToggleButton key={d.v} value={d.v}>{d.l}</ToggleButton>
-                ))}
-              </ToggleButtonGroup>
-
-              <TextField
-                select size="small" label="Classificação"
-                value={classifFiltro}
-                onChange={(e) => patchTela({ classifFiltro: e.target.value })}
-                sx={{ width: 200 }}
-              >
-                <MenuItem value="TODAS">Todas</MenuItem>
-                <MenuItem value="CRITICO">🔴 Crítico</MenuItem>
-                <MenuItem value="ATENCAO">🟠 Atenção</MenuItem>
-                <MenuItem value="EFICIENTE">🟢 Eficiente</MenuItem>
-                <MenuItem value="SEM_REF">⚪ Sem ref.</MenuItem>
-              </TextField>
-
-              {/* v6.7.0 — ranking próprio da dimensão Cliente (PRD §8/C.4) */}
-              {ehCliente && (
-                <TextField
-                  select size="small" label="Ordenar por"
-                  value={rankingCliente}
-                  onChange={(e) => setRankingCliente(e.target.value)}
-                  sx={{ width: 260 }}
-                >
-                  {RANKINGS_CLIENTE.map((r) => (
-                    <MenuItem key={r.v} value={r.v}>{r.l}</MenuItem>
-                  ))}
-                </TextField>
-              )}
-            </Stack>
-
             <ToggleButtonGroup
-              size="small" exclusive value={modo}
-              onChange={(_, v) => v && patchTela({ modo: v })}
-              sx={{ "& .MuiToggleButton-root": { height: 40, minWidth: 116 } }}
+              size="small" exclusive value={dimensao}
+              onChange={(_, v) => v && patchTela({ dimensao: v })}
+              sx={{ "& .MuiToggleButton-root": { height: 40, minWidth: 116 }, flexWrap: "wrap" }}
             >
-              <ToggleButton value="consolidado">Consolidado</ToggleButton>
-              <ToggleButton value="mensal">Mês</ToggleButton>
+              {DIMENSOES.map((d) => (
+                <ToggleButton key={d.v} value={d.v}>{d.l}</ToggleButton>
+              ))}
             </ToggleButtonGroup>
+
+            <TextField
+              select size="small" label="Classificação"
+              value={classifFiltro}
+              onChange={(e) => patchTela({ classifFiltro: e.target.value })}
+              sx={{ width: 200 }}
+            >
+              <MenuItem value="TODAS">Todas</MenuItem>
+              <MenuItem value="CRITICO">🔴 Crítico</MenuItem>
+              <MenuItem value="ATENCAO">🟠 Atenção</MenuItem>
+              <MenuItem value="EFICIENTE">🟢 Eficiente</MenuItem>
+              <MenuItem value="SEM_REF">⚪ Sem ref.</MenuItem>
+            </TextField>
+
+            {/* Ordenação — comum às 5 dimensões; Cliente ganha 3 opções extras
+                (impacto financeiro, adicionais, fragmentação — PRD §8/C.4). */}
+            <TextField
+              select size="small" label="Ordenar por"
+              value={ranking}
+              onChange={(e) => setRanking(e.target.value)}
+              sx={{ width: 260 }}
+            >
+              {[...RANKINGS_COMUNS, ...(ehCliente ? RANKINGS_SO_CLIENTE : [])].map((r) => (
+                <MenuItem key={r.v} value={r.v}>{r.l}</MenuItem>
+              ))}
+            </TextField>
           </Stack>
 
           {/* ── Distribuição de eficiência (3 cards) ─────────────────────── */}
           <Typography variant="subtitle1" sx={{ fontWeight: 700, mb: 1.5 }}>
             Distribuição de eficiência — {rotuloDim}
             <Typography component="span" variant="body2" color="text.secondary" sx={{ ml: 1 }}>
-              ({fmtNumero(totalDimensao, 0)} {consolidado ? "registros" : "registros mensais"})
+              ({fmtNumero(totalDimensao, 0)} registros)
             </Typography>
           </Typography>
           <Grid container spacing={2} sx={{ mb: 2.5 }}>
@@ -516,7 +535,7 @@ export default function DiagnosticoDLG() {
                         Filtro de classificação: {ROTULO_CLF[classifFiltro]} — {fmtNumero(linhasTabela.length, 0)} de {fmtNumero(analitico.length, 0)} registros.
                       </Typography>
                     )}
-                    {ehCliente && rankingCliente === "fragmentacao" && (
+                    {ehCliente && ranking === "fragmentacao" && (
                       <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 1 }}>
                         Mostrando apenas clientes com sinal de fragmentação ativo, ordenados por impacto financeiro potencial.
                       </Typography>
@@ -524,25 +543,25 @@ export default function DiagnosticoDLG() {
                     {linhasTabela.length === 0 ? (
                       <VazioEstado mensagem={`Nenhum registro classificado como "${ROTULO_CLF[classifFiltro]}" nesta dimensão`} />
                     ) : (
+                    <Box sx={{ overflowX: "auto" }}>
                     <Table size="small">
                     <TableHead>
                       <TableRow>
                         {ehCliente && <TableCell padding="checkbox" />}
                         <TableCell>{rotuloDim}</TableCell>
-                        {!consolidado && <TableCell>Mês</TableCell>}
-                        <TableCell align="right">CT-e</TableCell>
-                        <TableCell align="right">R$/kg</TableCell>
-                        <TableCell align="right">% Frete</TableCell>
-                        <TableCell align="right">Custo/entrega</TableCell>
-                        <TableCell align="right">Frete total</TableCell>
-                        <TableCell align="right">Desvio</TableCell>
-                        <TableCell align="center">Classificação</TableCell>
-                        {ehCliente && <TableCell align="right">Impacto potencial</TableCell>}
+                        <TableCell align="right" sx={{ whiteSpace: "nowrap" }}>CT-e</TableCell>
+                        <TableCell align="right" sx={{ whiteSpace: "nowrap" }}>R$/kg</TableCell>
+                        <TableCell align="right" sx={{ whiteSpace: "nowrap" }}>% Frete</TableCell>
+                        <TableCell align="right" sx={{ whiteSpace: "nowrap" }}>Custo/entrega</TableCell>
+                        <TableCell align="right" sx={{ whiteSpace: "nowrap" }}>Frete total</TableCell>
+                        <TableCell align="right" sx={{ whiteSpace: "nowrap" }}>Desvio</TableCell>
+                        <TableCell align="center" sx={{ whiteSpace: "nowrap" }}>Classificação</TableCell>
+                        {ehCliente && <TableCell align="right" sx={{ whiteSpace: "nowrap" }}>Impacto potencial</TableCell>}
                       </TableRow>
                     </TableHead>
                     <TableBody>
-                      {linhasTabela.map((r, i) => {
-                        const chaveLinha = consolidado ? r.chave : (r.id || i);
+                      {linhasTabela.map((r) => {
+                        const chaveLinha = r.chave;
                         const aberto = expandidos.has(chaveLinha);
                         const alternarExpansao = () => {
                           setExpandidos((prev) => {
@@ -566,28 +585,27 @@ export default function DiagnosticoDLG() {
                             </TableCell>
                           )}
                           <TableCell sx={{ fontWeight: 600 }}>{r.chave_label}</TableCell>
-                          {!consolidado && <TableCell>{r.periodo_ref}</TableCell>}
-                          <TableCell align="right">{r.qtd_ctes}</TableCell>
-                          <TableCell align="right">R$ {fmtNumero(r.rs_kg, 4)}</TableCell>
-                          <TableCell align="right">{fmtNumero(r.pct_frete, 2)}%</TableCell>
-                          <TableCell align="right">{fmtMoeda(r.custo_medio_entrega)}</TableCell>
-                          <TableCell align="right">{fmtMoeda(r.frete_total)}</TableCell>
-                          <TableCell align="right" sx={{ color: r.desvio_pct > 0 ? GD.danger : GD.ok }}>
+                          <TableCell align="right" sx={{ whiteSpace: "nowrap" }}>{r.qtd_ctes}</TableCell>
+                          <TableCell align="right" sx={{ whiteSpace: "nowrap" }}>{`R$ ${fmtNumero(r.rs_kg, 2)}`}</TableCell>
+                          <TableCell align="right" sx={{ whiteSpace: "nowrap" }}>{fmtNumero(r.pct_frete, 2)}%</TableCell>
+                          <TableCell align="right" sx={{ whiteSpace: "nowrap" }}>{fmtMoeda(r.custo_medio_entrega)}</TableCell>
+                          <TableCell align="right" sx={{ whiteSpace: "nowrap" }}>{fmtMoeda(r.frete_total)}</TableCell>
+                          <TableCell align="right" sx={{ whiteSpace: "nowrap", color: r.desvio_pct > 0 ? GD.danger : GD.ok }}>
                             {r.classificacao === "SEM_REF" ? "—" : `${r.desvio_pct > 0 ? "+" : ""}${fmtNumero(r.desvio_pct, 1)}%`}
                           </TableCell>
-                          <TableCell align="center">
+                          <TableCell align="center" sx={{ whiteSpace: "nowrap" }}>
                             <ChipClf valor={r.classificacao} />
                             {ehCliente && <ChipCausa causa={r.causa_dominante} />}
                           </TableCell>
                           {ehCliente && (
-                            <TableCell align="right">
+                            <TableCell align="right" sx={{ whiteSpace: "nowrap" }}>
                               {r.impacto_financeiro_potencial ? fmtMoeda(r.impacto_financeiro_potencial) : "—"}
                             </TableCell>
                           )}
                         </TableRow>
                         {ehCliente && (
                           <TableRow>
-                            <TableCell colSpan={consolidado ? 10 : 11} sx={{ py: 0, borderBottom: aberto ? undefined : "none" }}>
+                            <TableCell colSpan={10} sx={{ py: 0, borderBottom: aberto ? undefined : "none" }}>
                               <Collapse in={aberto} timeout="auto" unmountOnExit>
                                 <Box sx={{ py: 1.5 }}>
                                   <PainelDiagnosticoCliente row={r} />
@@ -601,6 +619,7 @@ export default function DiagnosticoDLG() {
                       })}
                     </TableBody>
                     </Table>
+                    </Box>
                     )}
                     {ehCliente && (
                       <Stack direction="row" alignItems="center" justifyContent="center" spacing={1} sx={{ mt: 2 }}>
@@ -623,35 +642,108 @@ export default function DiagnosticoDLG() {
                 outliers.length === 0 ? (
                   <VazioEstado mensagem="Nenhum outlier detectado" descricao="Registros fora do padrão (R$/kg acima de média+2σ ou % frete acima do limite) aparecem aqui." />
                 ) : (
-                  <Table size="small">
-                    <TableHead>
-                      <TableRow>
-                        <TableCell>Período</TableCell>
-                        <TableCell>Tipo</TableCell>
-                        <TableCell align="right">Valor real</TableCell>
-                        <TableCell align="right">Limite</TableCell>
-                        <TableCell align="right">Desvio</TableCell>
-                        <TableCell align="right">CT-e #</TableCell>
-                      </TableRow>
-                    </TableHead>
-                    <TableBody>
-                      {outliers.map((o) => (
-                        <TableRow key={o.id} hover>
-                          <TableCell>{o.periodo_ref}</TableCell>
-                          <TableCell>
-                            <Chip size="small" variant="outlined" color="warning"
-                              label={o.tipo_outlier === "RS_KG_2DP" ? "R$/kg > média+2σ" : o.tipo_outlier === "PCT_FRETE" ? "% Frete > limite" : o.tipo_outlier} />
-                          </TableCell>
-                          <TableCell align="right">{fmtNumero(o.valor_real, 4)}</TableCell>
-                          <TableCell align="right">{fmtNumero(o.valor_limite, 4)}</TableCell>
-                          <TableCell align="right" sx={{ color: GD.danger, fontWeight: 700 }}>
-                            +{fmtNumero(o.desvio_pct, 1)}%
-                          </TableCell>
-                          <TableCell align="right">{o.cte_id}</TableCell>
+                  <>
+                    <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ mb: 1.5 }}>
+                      <Chip size="small" variant="outlined" color="warning" label={`% Frete > limite (${fmtNumero(contagemPctFrete, 0)})`} />
+                      <Chip size="small" variant="outlined" color="info" label={`R$/kg > média+2σ (${fmtNumero(contagemRsKg, 0)})`} />
+                    </Stack>
+
+                    <Stack
+                      direction={{ xs: "column", sm: "row" }} spacing={1.5} alignItems={{ sm: "center" }}
+                      flexWrap="wrap" useFlexGap sx={{ mb: 1.5 }}
+                    >
+                      <ToggleButtonGroup
+                        size="small" exclusive value={tipoOutlierFiltro}
+                        onChange={(_, v) => v && setTipoOutlierFiltro(v)}
+                      >
+                        <ToggleButton value="ALL">Todos</ToggleButton>
+                        <ToggleButton value="PCT_FRETE">% Frete &gt; limite</ToggleButton>
+                        <ToggleButton value="RS_KG_2DP">R$/kg &gt; média+2σ</ToggleButton>
+                      </ToggleButtonGroup>
+                      <TextField
+                        size="small" label="Buscar CT-e" value={buscaCte}
+                        onChange={(e) => setBuscaCte(e.target.value.replace(/\D/g, ""))}
+                        sx={{ width: { xs: "100%", sm: 160 } }}
+                      />
+                      {(tipoOutlierFiltro !== "ALL" || buscaCte) && (
+                        <Button size="small" onClick={() => { setTipoOutlierFiltro("ALL"); setBuscaCte(""); }}>
+                          Limpar filtros
+                        </Button>
+                      )}
+                      <Box sx={{ flex: 1 }} />
+                      <TextField
+                        select size="small" label="Por página" value={pageSizeOutliers}
+                        onChange={(e) => setPageSizeOutliers(Number(e.target.value))}
+                        sx={{ width: 110 }}
+                      >
+                        <MenuItem value={20}>20</MenuItem>
+                        <MenuItem value={50}>50</MenuItem>
+                        <MenuItem value={100}>100</MenuItem>
+                      </TextField>
+                    </Stack>
+
+                    {outliersFiltrados.length === 0 ? (
+                      <VazioEstado mensagem="Nenhum outlier encontrado para este filtro" />
+                    ) : (
+                    <Box sx={{ overflowX: "auto" }}>
+                    <Table size="small">
+                      <TableHead>
+                        <TableRow>
+                          <TableCell align="right" sx={{ whiteSpace: "nowrap" }}>CT-e #</TableCell>
+                          <TableCell sx={{ whiteSpace: "nowrap" }}>Período</TableCell>
+                          <TableCell sx={{ whiteSpace: "nowrap" }}>Transportadora</TableCell>
+                          <TableCell sx={{ whiteSpace: "nowrap" }}>Tipo</TableCell>
+                          <TableCell align="right" sx={{ whiteSpace: "nowrap" }}>Valor mercadoria</TableCell>
+                          <TableCell align="right" sx={{ whiteSpace: "nowrap" }}>Peso</TableCell>
+                          <TableCell align="right" sx={{ whiteSpace: "nowrap" }}>Valor real</TableCell>
+                          <TableCell align="right" sx={{ whiteSpace: "nowrap" }}>Limite</TableCell>
+                          <TableCell align="right" sx={{ whiteSpace: "nowrap" }}>Desvio</TableCell>
                         </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
+                      </TableHead>
+                      <TableBody>
+                        {outliersPagina.map((o) => {
+                          const valorMercadoriaBaixo = o.valor_mercadoria != null && o.valor_mercadoria < 5;
+                          return (
+                          <TableRow key={o.id} hover>
+                            <TableCell align="right" sx={{ whiteSpace: "nowrap", fontWeight: 600 }}>{o.cte_id}</TableCell>
+                            <TableCell sx={{ whiteSpace: "nowrap" }}>{o.periodo_ref}</TableCell>
+                            <TableCell sx={{ whiteSpace: "nowrap" }}>{o.transportadora}</TableCell>
+                            <TableCell sx={{ whiteSpace: "nowrap" }}>
+                              <Chip size="small" variant="outlined" color={o.tipo_outlier === "RS_KG_2DP" ? "info" : "warning"}
+                                label={o.tipo_outlier === "RS_KG_2DP" ? "R$/kg > média+2σ" : o.tipo_outlier === "PCT_FRETE" ? "% Frete > limite" : o.tipo_outlier} />
+                            </TableCell>
+                            <TableCell
+                              align="right" sx={{ whiteSpace: "nowrap", color: valorMercadoriaBaixo ? GD.warn : undefined, fontWeight: valorMercadoriaBaixo ? 700 : 400 }}
+                              title={valorMercadoriaBaixo ? "Valor de mercadoria próximo de zero — possível problema de emissão do CT-e" : undefined}
+                            >
+                              {fmtMoeda(o.valor_mercadoria)}{valorMercadoriaBaixo ? " ⚠" : ""}
+                            </TableCell>
+                            <TableCell align="right" sx={{ whiteSpace: "nowrap" }}>{fmtNumero(o.peso, 1)} kg</TableCell>
+                            <TableCell align="right" sx={{ whiteSpace: "nowrap" }}>{fmtNumero(o.valor_real, o.tipo_outlier === "RS_KG_2DP" ? 2 : 4)}</TableCell>
+                            <TableCell align="right" sx={{ whiteSpace: "nowrap" }}>{fmtNumero(o.valor_limite, o.tipo_outlier === "RS_KG_2DP" ? 2 : 4)}</TableCell>
+                            <TableCell align="right" sx={{ whiteSpace: "nowrap", color: GD.danger, fontWeight: 700 }}>
+                              +{fmtNumero(o.desvio_pct, 1)}%
+                            </TableCell>
+                          </TableRow>
+                          );
+                        })}
+                      </TableBody>
+                    </Table>
+                    </Box>
+                    )}
+
+                    <Stack direction="row" alignItems="center" justifyContent="center" spacing={1} sx={{ mt: 2 }}>
+                      <IconButton size="small" disabled={paginaOutliersClamped <= 1} onClick={() => setPaginaOutliers((p) => Math.max(1, p - 1))}>
+                        <ChevronLeftIcon />
+                      </IconButton>
+                      <Typography variant="body2" color="text.secondary">
+                        Página {paginaOutliersClamped} de {totalPaginasOutliers} · {fmtNumero(outliersFiltrados.length, 0)} outlier(s)
+                      </Typography>
+                      <IconButton size="small" disabled={paginaOutliersClamped >= totalPaginasOutliers} onClick={() => setPaginaOutliers((p) => p + 1)}>
+                        <ChevronRightIcon />
+                      </IconButton>
+                    </Stack>
+                  </>
                 )
               )}
             </CardContent>

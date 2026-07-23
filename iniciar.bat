@@ -2,11 +2,11 @@
 setlocal enabledelayedexpansion
 chcp 65001 >nul
 cd /d "%~dp0"
-title GD Frete Diagnostico - Iniciando
+title GD Diagnostico Logistico - Iniciando
 
 echo.
 echo  ========================================
-echo   GD Frete Diagnostico - Iniciando...
+echo   GD Diagnostico Logistico - Iniciando...
 echo  ========================================
 echo.
 

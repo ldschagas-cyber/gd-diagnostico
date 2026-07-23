@@ -1,7 +1,8 @@
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Box, Grid, Card, CardContent, Typography, Stack,
-  LinearProgress, Alert, Button, Divider,
+  LinearProgress, Alert, Button, Chip, IconButton, Tooltip,
 } from "@mui/material";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid,
@@ -13,11 +14,14 @@ import LocalShippingIcon from "@mui/icons-material/LocalShipping";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import EmojiEventsIcon from "@mui/icons-material/EmojiEvents";
 import AddIcon from "@mui/icons-material/Add";
+import DeleteIcon from "@mui/icons-material/Delete";
 import PageHeader from "../components/PageHeader";
-import StatCard from "../components/StatCard";
 import { VazioEstado } from "../components/Tabela";
+import BidStatusChip from "../components/BidStatusChip";
+import ConfirmDialog from "../components/ConfirmDialog";
+import { useFeedback } from "../components/Feedback";
 import { useEmpresa } from "../contexts/EmpresaContext";
-import { useBidDashboard, useBidLista } from "../api/queries";
+import { useBidDashboard, useBidLista, useMutacoesBid } from "../api/queries";
 import { extrairErro } from "../api/client";
 import { fmtMoeda, fmtNumero } from "../utils/format";
 import { GD } from "../theme";
@@ -52,15 +56,30 @@ function KPICard({ titulo, valor, subtitulo, icone, color }) {
 export default function BidDashboard() {
   const { empresaAtivaId, empresaAtiva } = useEmpresa();
   const nav = useNavigate();
+  const { sucesso, erro: erroToast } = useFeedback();
 
   // Dashboard (KPIs) e lista via React Query: cache + dedup; retorno à tela é instantâneo.
   const { data: kpis, isFetching: carregandoKpis, error: erroKpis } =
     useBidDashboard(empresaAtivaId);
   const { data: bids = [], isFetching: carregandoLista, error: erroLista } =
     useBidLista(empresaAtivaId);
+  const mut = useMutacoesBid(empresaAtivaId);
+
+  const [confirmar, setConfirmar] = useState(null);
 
   const carregando = carregandoKpis || carregandoLista;
   const erro = erroKpis || erroLista;
+
+  const excluir = async () => {
+    try {
+      await mut.deletar.mutateAsync(confirmar.id);
+      sucesso("BID excluído.");
+    } catch (e) {
+      erroToast(extrairErro(e));
+    } finally {
+      setConfirmar(null);
+    }
+  };
 
   if (!empresaAtivaId) {
     return (
@@ -70,15 +89,6 @@ export default function BidDashboard() {
       </Box>
     );
   }
-
-  // Gráfico 1: economia por BID (top 8)
-  const graficoBids = bids
-    .filter((b) => b.status === "ENCERRADO" || b.status === "EM_COTACAO")
-    .slice(0, 8)
-    .map((b) => ({
-      nome: b.nome.length > 18 ? b.nome.slice(0, 18) + "…" : b.nome,
-      status: b.status,
-    }));
 
   return (
     <Box>
@@ -154,70 +164,15 @@ export default function BidDashboard() {
         </Grid>
       </Grid>
 
-      <Grid container spacing={2}>
-        {/* Gráfico: BIDs por status */}
-        <Grid item xs={12} md={6}>
-          <Card variant="outlined">
-            <CardContent>
-              <Typography variant="subtitle1" fontWeight={700} sx={{ mb: 2 }}>
-                BIDs Recentes
-              </Typography>
-              {bids.length === 0 && !carregando ? (
-                <VazioEstado
-                  mensagem="Nenhum BID criado ainda"
-                  icone={<GavelIcon sx={{ fontSize: 48, color: GD.indigo, opacity: 0.3 }} />}
-                />
-              ) : (
-                <Box>
-                  {bids.slice(0, 6).map((b, i) => (
-                    <Box key={b.id}>
-                      <Stack
-                        direction="row"
-                        justifyContent="space-between"
-                        alignItems="center"
-                        sx={{ py: 1.5, cursor: "pointer", "&:hover": { bgcolor: "action.hover" }, px: 1, borderRadius: 1 }}
-                        onClick={() => nav(`/bid/${b.id}`)}
-                      >
-                        <Box>
-                          <Typography variant="body2" fontWeight={600}>{b.nome}</Typography>
-                          <Typography variant="caption" color="text.secondary">
-                            {b.data_inicio} → {b.data_encerramento || "—"}
-                          </Typography>
-                        </Box>
-                        <Box sx={{ textAlign: "right" }}>
-                          <Typography
-                            variant="caption"
-                            sx={{
-                              fontWeight: 700,
-                              color:
-                                b.status === "ENCERRADO" ? "#375623"
-                                : b.status === "EM_COTACAO" ? GD.amber
-                                : b.status === "ABERTO" ? GD.blue
-                                : b.status === "CANCELADO" ? "error.main"
-                                : "text.secondary",
-                            }}
-                          >
-                            {b.status.replace("_", " ")}
-                          </Typography>
-                        </Box>
-                      </Stack>
-                      {i < bids.slice(0, 6).length - 1 && <Divider />}
-                    </Box>
-                  ))}
-                </Box>
-              )}
-            </CardContent>
-          </Card>
-        </Grid>
-
-        {/* Gráfico: Economia por status */}
-        <Grid item xs={12} md={6}>
+      <Grid container spacing={2} sx={{ mb: 3 }}>
+        {/* Resumo financeiro */}
+        <Grid item xs={12}>
           <Card variant="outlined">
             <CardContent>
               <Typography variant="subtitle1" fontWeight={700} sx={{ mb: 2 }}>
                 Resumo Financeiro
               </Typography>
-              <ResponsiveContainer width="100%" height={220}>
+              <ResponsiveContainer width="100%" height={200}>
                 <BarChart
                   data={[
                     { nome: "Identificada", valor: kpis?.economia_identificada ?? 0 },
@@ -246,35 +201,97 @@ export default function BidDashboard() {
             </CardContent>
           </Card>
         </Grid>
-
-        {/* Call to action se não há BIDs */}
-        {bids.length === 0 && !carregando && (
-          <Grid item xs={12}>
-            <Card
-              variant="outlined"
-              sx={{ border: `2px dashed ${GD.indigo}`, textAlign: "center", py: 4 }}
-            >
-              <CardContent>
-                <GavelIcon sx={{ fontSize: 56, color: GD.indigo, opacity: 0.3, mb: 1 }} />
-                <Typography variant="h6" color="text.secondary" gutterBottom>
-                  Nenhum BID criado ainda
-                </Typography>
-                <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                  Crie o primeiro processo de concorrência logística para esta empresa.
-                </Typography>
-                <Button
-                  variant="contained"
-                  startIcon={<AddIcon />}
-                  onClick={() => nav("/bid/novo")}
-                  sx={{ bgcolor: GD.indigo }}
-                >
-                  Criar primeiro BID
-                </Button>
-              </CardContent>
-            </Card>
-          </Grid>
-        )}
       </Grid>
+
+      {/* Todos os BIDs (grade completa — antes era a tela separada "BIDs de Frete") */}
+      <Typography variant="subtitle1" fontWeight={700} sx={{ mb: 1.5 }}>
+        Todos os BIDs
+      </Typography>
+
+      {bids.length === 0 && !carregando ? (
+        <Card variant="outlined" sx={{ border: `2px dashed ${GD.indigo}`, textAlign: "center", py: 4 }}>
+          <CardContent>
+            <GavelIcon sx={{ fontSize: 56, color: GD.indigo, opacity: 0.3, mb: 1 }} />
+            <Typography variant="h6" color="text.secondary" gutterBottom>
+              Nenhum BID criado ainda
+            </Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+              Crie o primeiro processo de concorrência logística para esta empresa.
+            </Typography>
+            <Button
+              variant="contained"
+              startIcon={<AddIcon />}
+              onClick={() => nav("/bid/novo")}
+              sx={{ bgcolor: GD.indigo }}
+            >
+              Criar primeiro BID
+            </Button>
+          </CardContent>
+        </Card>
+      ) : (
+        <Grid container spacing={2}>
+          {bids.map((bid) => (
+            <Grid item xs={12} md={6} key={bid.id}>
+              <Card
+                variant="outlined"
+                sx={{ cursor: "pointer", "&:hover": { boxShadow: 4 }, transition: "box-shadow 0.2s" }}
+                onClick={() => nav(`/bid/${bid.id}`)}
+              >
+                <CardContent>
+                  <Stack direction="row" justifyContent="space-between" alignItems="flex-start">
+                    <Stack direction="row" spacing={1.5} alignItems="center">
+                      <GavelIcon sx={{ color: GD.indigo, fontSize: 28 }} />
+                      <Box>
+                        <Typography variant="h6" sx={{ fontFamily: "'Sora', sans-serif", color: GD.indigo }}>
+                          {bid.nome}
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          {bid.periodo_analise_inicio && bid.periodo_analise_fim
+                            ? `Período: ${bid.periodo_analise_inicio} → ${bid.periodo_analise_fim}`
+                            : "Período não definido"}
+                        </Typography>
+                      </Box>
+                    </Stack>
+                    <Stack direction="row" spacing={0.5} alignItems="center">
+                      <BidStatusChip status={bid.status} />
+                      <Tooltip title={bid.status === "ENCERRADO" ? "BID encerrado não pode ser excluído" : "Excluir BID"}>
+                        <span>
+                          <IconButton
+                            size="small"
+                            disabled={bid.status === "ENCERRADO"}
+                            onClick={(e) => { e.stopPropagation(); setConfirmar(bid); }}
+                          >
+                            <DeleteIcon fontSize="small" />
+                          </IconButton>
+                        </span>
+                      </Tooltip>
+                    </Stack>
+                  </Stack>
+                  {bid.objetivo && (
+                    <Typography variant="body2" color="text.secondary" sx={{ mt: 1.5, noWrap: true }}>
+                      {bid.objetivo.slice(0, 100)}{bid.objetivo.length > 100 ? "..." : ""}
+                    </Typography>
+                  )}
+                  {bid.data_encerramento && (
+                    <Chip size="small" label={`Encerra: ${bid.data_encerramento}`} variant="outlined" sx={{ mt: 1.5 }} />
+                  )}
+                </CardContent>
+              </Card>
+            </Grid>
+          ))}
+        </Grid>
+      )}
+
+      <ConfirmDialog
+        aberto={Boolean(confirmar)}
+        titulo="Excluir BID"
+        mensagem={`Deseja excluir o BID "${confirmar?.nome}"? Esta ação não pode ser desfeita.`}
+        textoConfirmar="Excluir"
+        corConfirmar="error"
+        onConfirmar={excluir}
+        onCancelar={() => setConfirmar(null)}
+        carregando={mut.deletar.isPending}
+      />
     </Box>
   );
 }

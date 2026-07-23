@@ -3,7 +3,7 @@ import { Outlet, useNavigate, useLocation } from "react-router-dom";
 import {
   Box, Drawer, AppBar, Toolbar, List, ListItemButton, ListItemIcon,
   ListItemText, Typography, IconButton, Avatar, Menu, MenuItem,
-  Divider, useMediaQuery, Collapse,
+  Divider, useMediaQuery, Collapse, Tooltip,
 } from "@mui/material";
 import MenuIcon            from "@mui/icons-material/Menu";
 import LogoutIcon          from "@mui/icons-material/Logout";
@@ -18,8 +18,8 @@ import ManageSearchIcon      from "@mui/icons-material/ManageSearch";
 import StackedLineChartIcon from "@mui/icons-material/StackedLineChart";
 import LocationCityIcon    from "@mui/icons-material/LocationCity";
 import FlagIcon            from "@mui/icons-material/Flag";
+import ReceiptLongIcon     from "@mui/icons-material/ReceiptLong";
 import UploadFileIcon      from "@mui/icons-material/UploadFile";
-import TableChartIcon      from "@mui/icons-material/TableChart";
 import AssessmentIcon      from "@mui/icons-material/Assessment";
 import PeopleIcon          from "@mui/icons-material/People";
 import TuneIcon            from "@mui/icons-material/Tune";
@@ -29,13 +29,11 @@ import ExpandLessIcon      from "@mui/icons-material/ExpandLess";
 import ExpandMoreIcon      from "@mui/icons-material/ExpandMore";
 import SettingsIcon        from "@mui/icons-material/Settings";
 import PsychologyIcon       from "@mui/icons-material/Psychology";
-import AutoAwesomeIcon      from "@mui/icons-material/AutoAwesome";
-import LightbulbIcon        from "@mui/icons-material/Lightbulb";
 import RecommendIcon        from "@mui/icons-material/Recommend";
-import SpeedIcon            from "@mui/icons-material/Speed";
 import LibraryBooksIcon     from "@mui/icons-material/LibraryBooks";
 import GridOnIcon           from "@mui/icons-material/GridOn";
 import HubIcon              from "@mui/icons-material/Hub";
+import AltRouteIcon         from "@mui/icons-material/AltRoute";
 import { useAuth }         from "../contexts/AuthContext";
 import { usePrefetch }     from "../hooks/usePrefetch";
 import EmpresaSelector     from "../components/EmpresaSelector";
@@ -62,63 +60,72 @@ const GRUPOS = [
     ],
   },
   {
-    titulo: "Configuração",
+    titulo: "Parâmetros",
     itens: [
-      { rotulo: "Metas & Mercado (%)", icone: <FlagIcon />,  rota: "/metas" },
+      { rotulo: "Metas", icone: <FlagIcon />,  rota: "/metas" },
+      { rotulo: "Referência de Frete", icone: <TuneIcon />, rota: "/configuracoes/parametros-mercado", soAdmin: true },
       { rotulo: "Hubs Logísticos", icone: <HubIcon />, rota: "/configuracoes/hubs-logisticos" },
+      { rotulo: "Matriz Benchmark", icone: <GridOnIcon />, rota: "/inteligencia-mercado/matriz-od", soAdmin: true },
     ],
   },
   {
     titulo: "Importação",
     itens: [
-      { rotulo: "Importar CT-e",  icone: <UploadFileIcon />, rota: "/importar/cte" },
-      { rotulo: "Importar Excel", icone: <TableChartIcon />, rota: "/importar/excel" },
+      { rotulo: "Importação", icone: <UploadFileIcon />, rota: "/importar/cte" },
     ],
   },
   {
     titulo: "Diagnóstico Logístico",
     itens: [
-      { rotulo: "Dashboard",  icone: <SpaceDashboardIcon />, rota: "/",          exato: true },
-      { rotulo: "Diagnóstico", icone: <ManageSearchIcon />, rota: "/diagnostico/dlg" },
-      { rotulo: "Recomendações", icone: <RecommendIcon />, rota: "/diagnostico/recomendacoes" },
-      { rotulo: "Relatórios", icone: <AssessmentIcon />,     rota: "/relatorios" },
+      { rotulo: "Diagnóstico",  icone: <SpaceDashboardIcon />, rota: "/",          exato: true },
+      { rotulo: "Análise de Eficiência", icone: <ManageSearchIcon />, rota: "/diagnostico/dlg" },
+      { rotulo: "Radar de Custo", icone: <StackedLineChartIcon />, rota: "/benchmark/mbl" },
     ],
   },
   {
-    titulo: "Inteligência de Mercado",
+    titulo: "Benchmark Mercado",
     itens: [
-      { rotulo: "Matriz Benchmark (OD)", icone: <GridOnIcon />, rota: "/inteligencia-mercado/matriz-od" },
-    ],
-  },
-  {
-    titulo: "Benchmark Logístico",
-    itens: [
-      { rotulo: "Dashboard Executivo",    icone: <InsightsIcon />,          rota: "/benchmark/executivo" },
-      { rotulo: "Diagnóstico",            icone: <ManageSearchIcon />,      rota: "/benchmark/diagnostico" },
-      { rotulo: "Comparativo de Mercado", icone: <CompareArrowsIcon />,     rota: "/benchmark/comparativo-mercado" },
+      { rotulo: "Dashboard Executivo",     icone: <InsightsIcon />,          rota: "/benchmark/executivo" },
+      { rotulo: "Comparação com o Mercado", icone: <CompareArrowsIcon />,    rota: "/benchmark/comparativo-mercado" },
       { rotulo: "Potencial de Economia",  icone: <SavingsIcon />,           rota: "/benchmark/economia" },
     ],
   },
   {
     titulo: "Concorrência Logística - BID",
     itens: [
-      { rotulo: "Dashboard BIDs", icone: <SpaceDashboardIcon />, rota: "/bid/dashboard" },
-      { rotulo: "BIDs de Frete",  icone: <GavelIcon />,          rota: "/bid", exato: true },
-      { rotulo: "Comparativo",    icone: <CompareArrowsIcon />,  rota: "/bid/comparativo" },
-      { rotulo: "Motor de Decisão", icone: <GavelIcon />,         rota: "/bid/decisao" },
-      { rotulo: "Benchmark (MBL)", icone: <StackedLineChartIcon />, rota: "/bid/mbl" },
+      { rotulo: "Dashboard BIDs",   icone: <SpaceDashboardIcon />, rota: "/bid/dashboard" },
+      { rotulo: "Motor de Decisão", icone: <GavelIcon />,          rota: "/bid/decisao" },
     ],
   },
   {
-    titulo: "Inteligência Logística - IA",
+    titulo: "Simulador",
     itens: [
-      { rotulo: "Visão Geral",         icone: <PsychologyIcon />,   rota: "/inteligencia", exato: true },
-      { rotulo: "Diagnóstico IA",      icone: <AutoAwesomeIcon />,  rota: "/inteligencia/diagnostico" },
-      { rotulo: "Insights",            icone: <LightbulbIcon />,    rota: "/inteligencia/insights" },
-      { rotulo: "Score Logístico",     icone: <SpeedIcon />,        rota: "/inteligencia/score" },
-      { rotulo: "Oportunidades",       icone: <SavingsIcon />,      rota: "/inteligencia/oportunidades" },
-      { rotulo: "Assistente",          icone: <PsychologyIcon />,   rota: "/inteligencia/assistente" },
-      { rotulo: "Base de Conhecimento", icone: <LibraryBooksIcon />, rota: "/inteligencia/conhecimento" },
+      { rotulo: "Simulador de Hub", icone: <AltRouteIcon />, rota: "/simulador/hub" },
+    ],
+  },
+  {
+    // Grupo próprio — "Recomendações" cruza Diagnóstico Logístico e Benchmark
+    // Mercado (ver comentário em Recomendacoes.jsx), então não pertence a
+    // nenhum dos dois módulos. Mesmo padrão de "Relatórios" (grupo com um
+    // único item).
+    titulo: "Recomendações",
+    itens: [
+      { rotulo: "Recomendações", icone: <RecommendIcon />, rota: "/diagnostico/recomendacoes" },
+    ],
+  },
+  {
+    // Grupo próprio — fechamento é rotina operacional mensal (fatura, fecha,
+    // reabre se preciso), não uma configuração estática; não pertence a
+    // "Parâmetros". Mesmo padrão de grupo com item único de "Recomendações".
+    titulo: "Fechamento de Custo de Frete",
+    itens: [
+      { rotulo: "Fechamento de Custo de Frete", icone: <ReceiptLongIcon />, rota: "/fechamento-frete" },
+    ],
+  },
+  {
+    titulo: "Relatórios",
+    itens: [
+      { rotulo: "Relatórios", icone: <AssessmentIcon />, rota: "/relatorios", exato: true },
     ],
   },
 ];
@@ -135,7 +142,7 @@ function Logo() {
       }}>GD</Box>
       <Box sx={{ lineHeight: 1 }}>
         <Typography sx={{ color: "#fff", fontFamily: "'Sora', sans-serif", fontWeight: 700, fontSize: 15 }}>
-          Frete Diagnóstico
+          Diagnóstico Logístico
         </Typography>
         <Typography sx={{ color: "rgba(255,255,255,0.6)", fontSize: 11 }}>GD Conecta</Typography>
       </Box>
@@ -257,7 +264,7 @@ export default function AppLayout() {
       <Divider sx={{ borderColor: "rgba(255,255,255,0.08)" }} />
       <Box sx={{ p: 2 }}>
         <Typography sx={{ color: "rgba(255,255,255,0.5)", fontSize: 11 }}>
-          v6.10.0 · GD Frete Diagnóstico
+          v6.11.0 · GD Diagnóstico Logístico
         </Typography>
       </Box>
     </Box>
@@ -283,6 +290,16 @@ export default function AppLayout() {
               <IconButton onClick={() => setAberto(true)} edge="start"><MenuIcon /></IconButton>
             )}
             <Box sx={{ flex: 1 }}><EmpresaSelector /></Box>
+            <Tooltip title="Assistente">
+              <IconButton onClick={() => navigate("/inteligencia/assistente")} size="small">
+                <PsychologyIcon sx={{ color: GD.indigo }} />
+              </IconButton>
+            </Tooltip>
+            <Tooltip title="Base de Conhecimento">
+              <IconButton onClick={() => navigate("/inteligencia/conhecimento")} size="small">
+                <LibraryBooksIcon sx={{ color: GD.indigo }} />
+              </IconButton>
+            </Tooltip>
             <IconButton onClick={(e) => setMenuPerfil(e.currentTarget)} size="small">
               <Avatar sx={{ width: 34, height: 34, bgcolor: GD.indigo, fontSize: 14 }}>
                 {usuario?.nome?.[0]?.toUpperCase() || "U"}

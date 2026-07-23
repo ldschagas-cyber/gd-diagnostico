@@ -5,7 +5,6 @@ import { ptBR } from "@mui/material/locale";
 import { createTheme } from "@mui/material/styles";
 import { ptBR as dgPtBR } from "@mui/x-data-grid/locales";
 import { QueryClientProvider } from "@tanstack/react-query";
-import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
 import baseTheme from "./theme";
 import { queryClient } from "./api/queryClient";
 import App from "./App";
@@ -21,7 +20,6 @@ ReactDOM.createRoot(document.getElementById("root")).render(
         <CssBaseline />
         <App />
       </ThemeProvider>
-      {import.meta.env.DEV && <ReactQueryDevtools initialIsOpen={false} />}
     </QueryClientProvider>
   </React.StrictMode>
 );

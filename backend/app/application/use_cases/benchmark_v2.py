@@ -3,8 +3,15 @@
 Resolve a referência de benchmark para um par Origem→Destino (por região),
 aplicando a hierarquia de prioridade:
 
-    1. benchmark_cliente (override ativo da empresa)  → vence
-    2. benchmark_mercado (source of truth global)     → fallback
+    1. benchmark_cliente (override ativo da empresa)      → vence
+    2. benchmark_mercado, linha do setor da empresa        → fallback fino
+    3. benchmark_mercado, linha "TODOS" (genérica)          → fallback amplo
+    4. indisponível
+
+O degrau 2 só existe quando há uma linha pesquisada especificamente para o
+setor cadastrado em ``EmpresaModel.setor`` (mesmo vocabulário controlado —
+SetorEnum); na ausência dela, cai para "TODOS" exatamente como o
+comportamento anterior a essa dimensão.
 
 E compara o valor de uma transportadora contra os percentis de mercado
 (P50 mediana, P75) conforme as regras de uso do BID/Simulação.
@@ -24,6 +31,7 @@ from app.infrastructure.database.models import (
     BenchmarkClienteModel,
     BenchmarkMercadoModel,
     BenchmarkObservadoModel,
+    EmpresaModel,
 )
 
 
@@ -33,6 +41,7 @@ class ReferenciaBenchmark:
     origem_regiao: str
     destino_regiao: str
     fonte: str                       # CLIENTE | MERCADO | MERCADO_LEGADO | INDISPONIVEL
+    setor: str = "TODOS"             # setor da linha efetivamente usada (ou "TODOS" no fallback genérico)
     rs_kg_p10: float = 0.0
     rs_kg_p25: float = 0.0
     rs_kg_p50: float = 0.0           # mediana — referência principal
@@ -78,8 +87,16 @@ def mapa_percentis_mercado(db: Session) -> dict[str, dict[str, float]]:
     terminam nessa região. Inclui a chave especial "NACIONAL" com a média
     de todo o país. Cada entrada traz as chaves "p10".."p90" e os apelidos
     "min"/"medio"/"max" (= p10/p50/p90), compatíveis com o antigo
-    ``Benchmark.frete_kg_min/medio/max`` (V1)."""
-    rows = db.execute(select(BenchmarkMercadoModel)).scalars().all()
+    ``Benchmark.frete_kg_min/medio/max`` (V1).
+
+    Só considera linhas com ``setor == "TODOS"`` — esta é a referência
+    genérica consumida por Score Logístico, Insights, Oportunidades e
+    Assistente IA (nenhum tem empresa/setor no contexto desta chamada);
+    misturar linhas pesquisadas para um setor específico aqui inflaria ou
+    distorceria a média nacional/regional para todo mundo."""
+    rows = db.execute(
+        select(BenchmarkMercadoModel).where(BenchmarkMercadoModel.setor == "TODOS")
+    ).scalars().all()
     grupos: dict[str, dict[str, list[float]]] = {}
     todos = {p: [] for p in _PERCENTIS}
     for r in rows:
@@ -165,23 +182,33 @@ class BenchmarkV2UseCase:
                 rs_kg_p10=v, rs_kg_p25=v, rs_kg_p50=v, rs_kg_p75=v, rs_kg_p90=v,
             )
 
-        # 2. Mercado (source of truth global). Preferimos a linha mais genérica
+        # 2. Mercado (source of truth global). Tenta primeiro a linha
+        #    pesquisada para o setor da empresa; sem ela, cai para "TODOS"
+        #    (referência genérica — comportamento anterior a esta dimensão).
+        #    Dentro de cada setor, preferimos a linha mais genérica
         #    (tipo_operacao TODOS, sem faixa de peso) quando houver várias.
-        merc = self.db.execute(
-            select(BenchmarkMercadoModel).where(
-                BenchmarkMercadoModel.origem_regiao == o,
-                BenchmarkMercadoModel.destino_regiao == d,
-            ).order_by(
-                BenchmarkMercadoModel.faixa_peso_max.asc(),
-            )
-        ).scalars().first()
-        if merc:
-            return ReferenciaBenchmark(
-                origem_regiao=o, destino_regiao=d, fonte=merc.fonte,
-                rs_kg_p10=merc.rs_kg_p10, rs_kg_p25=merc.rs_kg_p25,
-                rs_kg_p50=merc.rs_kg_p50, rs_kg_p75=merc.rs_kg_p75,
-                rs_kg_p90=merc.rs_kg_p90,
-            )
+        setor_empresa = self.db.execute(
+            select(EmpresaModel.setor).where(EmpresaModel.id == empresa_id)
+        ).scalar()
+        setores_tentativa = list(dict.fromkeys(s for s in (setor_empresa, "TODOS") if s))
+
+        for setor in setores_tentativa:
+            merc = self.db.execute(
+                select(BenchmarkMercadoModel).where(
+                    BenchmarkMercadoModel.origem_regiao == o,
+                    BenchmarkMercadoModel.destino_regiao == d,
+                    BenchmarkMercadoModel.setor == setor,
+                ).order_by(
+                    BenchmarkMercadoModel.faixa_peso_max.asc(),
+                )
+            ).scalars().first()
+            if merc:
+                return ReferenciaBenchmark(
+                    origem_regiao=o, destino_regiao=d, fonte=merc.fonte, setor=merc.setor,
+                    rs_kg_p10=merc.rs_kg_p10, rs_kg_p25=merc.rs_kg_p25,
+                    rs_kg_p50=merc.rs_kg_p50, rs_kg_p75=merc.rs_kg_p75,
+                    rs_kg_p90=merc.rs_kg_p90,
+                )
 
         # 3. Sem referência
         return ReferenciaBenchmark(
@@ -217,11 +244,14 @@ class BenchmarkV2UseCase:
     # ── Referência de mercado por REGIÃO DE DESTINO (agregada) ────────────
     def referencia_destino(self, destino_regiao: str) -> ReferenciaBenchmark:
         """Para um BID agrupado por destino, a referência de mercado é a média
-        dos pares OD que terminam naquela região (não há origem fixa no grupo)."""
+        dos pares OD que terminam naquela região (não há origem fixa no grupo,
+        nem empresa para resolver setor — usa sempre a linha genérica
+        "TODOS", nunca mistura com linhas pesquisadas por setor)."""
         d = (destino_regiao or "").strip().upper()
         rows = self.db.execute(
             select(BenchmarkMercadoModel).where(
-                BenchmarkMercadoModel.destino_regiao == d
+                BenchmarkMercadoModel.destino_regiao == d,
+                BenchmarkMercadoModel.setor == "TODOS",
             )
         ).scalars().all()
         if not rows:

@@ -12,7 +12,11 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from app.application.use_cases.mbl import MblUseCase, THRESHOLD_AMOSTRA_PADRAO
+from app.application.use_cases.mbl import (
+    MblUseCase,
+    THRESHOLD_AMOSTRA_PADRAO,
+    TOP_N_DIMENSAO_PADRAO,
+)
 from app.presentation.api.dependencies import (
     bloquear_visualizador,
     get_db,
@@ -67,29 +71,32 @@ def processar(
     data_fim:    Optional[date] = Query(None),
     threshold:   int = Query(THRESHOLD_AMOSTRA_PADRAO, ge=1,
                              description="Amostra mínima por segmento; abaixo disso = low_confidence"),
+    top_n_dimensao: int = Query(TOP_N_DIMENSAO_PADRAO, ge=1,
+                             description="Corte de cardinalidade para CLIENTE/FILIAL (top-N por amostra)"),
     _=Depends(verificar_acesso_empresa),
     __=Depends(bloquear_visualizador),
     uc: MblUseCase = Depends(_uc),
 ):
     """Recalcula o benchmark estatístico por período mensal, excluindo os
     outliers detectados pelo DLG. Idempotente e versionado (auditável)."""
-    return uc.processar(empresa_id, data_inicio, data_fim, threshold)
+    return uc.processar(empresa_id, data_inicio, data_fim, threshold, top_n_dimensao)
 
 
 @router.get("/{empresa_id}/benchmark", response_model=List[MblBenchmarkOut])
 def listar_benchmark(
     empresa_id: int,
-    dimensao:    Optional[str] = Query(None, description="REGIAO | CLUSTER | ROTA"),
+    dimensao:    Optional[str] = Query(None, description="REGIAO | CLUSTER | ROTA | TRANSPORTADORA | FILIAL | CLIENTE"),
     metrica:     Optional[str] = Query(None, description="RS_KG | PCT_FRETE | CUSTO_ENTREGA"),
     periodo_ref: Optional[str] = Query(None, description="YYYY-MM"),
     segmento:    Optional[str] = Query(None, description="Segmento específico, ex.: SUDESTE ou SP→RS"),
+    segmento_contains: Optional[str] = Query(None, description="Busca por substring do segmento (útil para CLIENTE/FILIAL/TRANSPORTADORA)"),
     apenas_confiavel: bool = Query(False, description="Exclui segmentos low_confidence"),
     _=Depends(verificar_acesso_empresa),
     uc: MblUseCase = Depends(_uc),
 ):
     """Consulta os datasets percentílicos do benchmark."""
     return uc.listar(
-        empresa_id, dimensao, metrica, periodo_ref, segmento,
+        empresa_id, dimensao, metrica, periodo_ref, segmento, segmento_contains,
         incluir_low_confidence=not apenas_confiavel,
     )
 

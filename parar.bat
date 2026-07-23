@@ -2,11 +2,11 @@
 setlocal
 chcp 65001 >nul
 cd /d "%~dp0"
-title GD Frete Diagnostico - Parando
+title GD Diagnostico Logistico - Parando
 
 echo.
 echo  ========================================
-echo   GD Frete Diagnostico - Parando...
+echo   GD Diagnostico Logistico - Parando...
 echo  ========================================
 echo.
 

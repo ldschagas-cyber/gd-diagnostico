@@ -72,7 +72,7 @@ class DiagnosticoUseCase:
         )
         # Prazo/OTIF e composição ainda precisam dos registros individuais (JSON / datas)
         ctes_prazo = self.cte_repo.listar_prazos(empresa_id, data_inicio, data_fim)
-        diag.prazos = self._indicadores_prazo(ctes_prazo)
+        diag.prazos = self._indicadores_prazo(ctes_prazo, empresa_id)
         ctes_comp = self.cte_repo.list_by_empresa(
             empresa_id, data_inicio, data_fim, apenas_ativos=True
         )
@@ -86,11 +86,11 @@ class DiagnosticoUseCase:
     def _evolucao_frete(
         self, empresa_id: int, meses: int = 6
     ) -> List[EvolucaoMensalItem]:
-        """Série mensal de Frete Total e % Frete/Mercadoria (apenas ativos).
+        """Série mensal de Frete Total, % Frete/Mercadoria e Frete por Kg (apenas ativos).
 
         Agregação no banco (ver ``CTeRepository.frete_mensal_ativos``). Usada
         pelo sparkline do card Frete Total e pelos gráficos de evolução mensal
-        (Frete Total e % Frete) do Dashboard. Ordem cronológica.
+        (Frete Total, % Frete e Frete por Kg) do Dashboard. Ordem cronológica.
         """
         linhas = self.cte_repo.frete_mensal_ativos(empresa_id, meses=meses)
         return [
@@ -98,6 +98,7 @@ class DiagnosticoUseCase:
                 mes=l["competencia"],
                 frete_total=l["frete_total"],
                 frete_pct=l["frete_pct"],
+                frete_rs_kg=l["frete_rs_kg"],
             )
             for l in linhas
         ]
@@ -127,7 +128,7 @@ class DiagnosticoUseCase:
         ind.qtd_ctes_cancelados = sit["cancelados"]
         ind.pct_cancelados = _div(sit["cancelados"], sit["emitidos"]) * 100
 
-        meta = self.meta_nac_repo.get()
+        meta = self.meta_nac_repo.get(empresa_id)
         if meta:
             ind.meta_rs_kg = meta.meta_rs_kg
             ind.meta_pct = meta.meta_pct_frete
@@ -136,6 +137,14 @@ class DiagnosticoUseCase:
             # Referência ideal (até X%) — usa a meta cadastrada (MELHORIA 6).
             if meta.meta_pct_frete:
                 ind.ref_pct_ideal_max = meta.meta_pct_frete
+
+        # Meta mensal nacional (v6.12) = soma dos orçamentos mensais das 5
+        # macrorregiões (Norte, Nordeste, Centro-Oeste, Sudeste, Sul cobrem
+        # todo o território — não existe orçamento nacional independente,
+        # sempre é a soma dos regionais, nunca fica dessincronizado).
+        soma_orcamento = sum(m.orcamento_mensal for m in self.meta_reg_repo.list(empresa_id))
+        if soma_orcamento:
+            ind.orcamento_mensal = soma_orcamento
 
         # Referência de mercado (X% a X%) — agrega os parâmetros de benchmark
         # já existentes na aplicação. Parametrizável no cadastro de benchmarks.
@@ -167,11 +176,34 @@ class DiagnosticoUseCase:
         if maxs:
             ind.ref_pct_mercado_max = round(max(maxs), 2)
 
+    def _meses_periodo(
+        self, empresa_id: int, data_inicio: Optional[date], data_fim: Optional[date]
+    ) -> Optional[int]:
+        """Nº de meses cobertos pelo período efetivamente agregado, inclusive.
+
+        Usado para transformar o orçamento MENSAL da Meta Regional no orçamento
+        do período (ex.: 3 meses filtrados = orçamento mensal × 3). Quando um
+        dos limites do filtro não foi informado, completa com o intervalo real
+        de emissão dos CT-es ativos da empresa — assim a meta de orçamento
+        também aparece quando o Dashboard é visto sem filtro de data (o
+        período agregado nesse caso é "todo o histórico ativo").
+        """
+        ini, fim = data_inicio, data_fim
+        if not ini or not fim:
+            ini_bd, fim_bd = self.cte_repo.intervalo_datas(empresa_id, data_inicio, data_fim)
+            ini = ini or ini_bd
+            fim = fim or fim_bd
+        if not ini or not fim:
+            return None
+        meses = (fim.year - ini.year) * 12 + (fim.month - ini.month) + 1
+        return max(1, meses)
+
     def _indicadores_regionais_sql(
         self, empresa_id: int, data_inicio: Optional[date], data_fim: Optional[date]
     ) -> List[IndicadorRegional]:
         rows = self.cte_repo.agregar_por_regiao(empresa_id, data_inicio, data_fim)
-        metas = {m.macro_regiao.value: m for m in self.meta_reg_repo.list()}
+        metas = {m.macro_regiao.value: m for m in self.meta_reg_repo.list(empresa_id)}
+        meses = self._meses_periodo(empresa_id, data_inicio, data_fim)
         resultado: List[IndicadorRegional] = []
         for r in rows:
             macro = r["macro_regiao"]
@@ -187,6 +219,10 @@ class DiagnosticoUseCase:
             if meta:
                 ind.meta_rs_kg = meta.meta_rs_kg
                 ind.meta_pct = meta.meta_pct_frete
+                if meta.orcamento_mensal:
+                    ind.orcamento_mensal = meta.orcamento_mensal
+                    if meses:
+                        ind.orcamento_periodo = meta.orcamento_mensal * meses
             resultado.append(ind)
         resultado.sort(key=lambda x: x.frete_total, reverse=True)
         return resultado
@@ -219,7 +255,7 @@ class DiagnosticoUseCase:
         return resultado
 
     # ---- RF011 ---------------------------------------------------------
-    def _indicador_nacional(self, ctes: List[CTe]) -> IndicadorNacional:
+    def _indicador_nacional(self, ctes: List[CTe], empresa_id: int) -> IndicadorNacional:
         ind = IndicadorNacional(qtd_ctes=len(ctes))
         ind.valor_total_frete = sum(c.valor_frete for c in ctes)
         ind.valor_total_mercadoria = sum(c.valor_mercadoria for c in ctes)
@@ -227,7 +263,7 @@ class DiagnosticoUseCase:
         ind.frete_rs_kg = _div(ind.valor_total_frete, ind.peso_total)
         ind.frete_pct = _div(ind.valor_total_frete, ind.valor_total_mercadoria) * 100
 
-        meta = self.meta_nac_repo.get()
+        meta = self.meta_nac_repo.get(empresa_id)
         if meta:
             ind.meta_rs_kg = meta.meta_rs_kg
             ind.meta_pct = meta.meta_pct_frete
@@ -236,13 +272,13 @@ class DiagnosticoUseCase:
         return ind
 
     # ---- RF012 ---------------------------------------------------------
-    def _indicadores_regionais(self, ctes: List[CTe]) -> List[IndicadorRegional]:
+    def _indicadores_regionais(self, ctes: List[CTe], empresa_id: int) -> List[IndicadorRegional]:
         grupos: dict[str, list[CTe]] = defaultdict(list)
         for c in ctes:
             macro = c.macro_regiao_destino.value if c.macro_regiao_destino else "INDEFINIDA"
             grupos[macro].append(c)
 
-        metas = {m.macro_regiao.value: m for m in self.meta_reg_repo.list()}
+        metas = {m.macro_regiao.value: m for m in self.meta_reg_repo.list(empresa_id)}
         resultado: List[IndicadorRegional] = []
         for macro, lista in grupos.items():
             frete = sum(c.valor_frete for c in lista)
@@ -301,8 +337,8 @@ class DiagnosticoUseCase:
         return {k: v for k, v in comp.items() if v > 0}
 
     # ---- RF014 ---------------------------------------------------------
-    def _indicadores_prazo(self, ctes: List[CTe]) -> List[IndicadorPrazo]:
-        metas = {m.macro_regiao.value: m for m in self.meta_reg_repo.list()}
+    def _indicadores_prazo(self, ctes: List[CTe], empresa_id: int) -> List[IndicadorPrazo]:
+        metas = {m.macro_regiao.value: m for m in self.meta_reg_repo.list(empresa_id)}
         grupos: dict[str, list[CTe]] = defaultdict(list)
         for c in ctes:
             if c.data_saida and c.data_entrega:
@@ -335,12 +371,12 @@ class DiagnosticoUseCase:
     def _oportunidades(self, diag: Diagnostico) -> List[str]:
         op: List[str] = []
         n = diag.nacional
-        if n.desvio_rs_kg is not None and n.desvio_rs_kg > 0:
+        if n.meta_rs_kg and n.desvio_rs_kg is not None and n.desvio_rs_kg > 0:
             op.append(
                 f"Frete nacional R$/kg ({n.frete_rs_kg:.2f}) está "
                 f"R$ {n.desvio_rs_kg:.2f}/kg acima da meta ({n.meta_rs_kg:.2f})."
             )
-        if n.desvio_pct is not None and n.desvio_pct > 0:
+        if n.meta_pct and n.desvio_pct is not None and n.desvio_pct > 0:
             op.append(
                 f"Frete sobre mercadoria ({n.frete_pct:.2f}%) excede a meta "
                 f"({n.meta_pct:.2f}%) em {n.desvio_pct:.2f} p.p."

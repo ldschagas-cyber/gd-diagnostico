@@ -106,16 +106,37 @@ export default function GraficosDiagnostico({ diag }) {
     meta: Number((r.meta_pct || 0).toFixed(2)),
   }));
 
-  // ---- 5b/5c) Evolução mensal (Frete Total e % Frete) — MELHORIA v6.10 ----
+  // ---- 5b/5c/5d) Evolução mensal (Frete Total, % Frete e Frete por Kg) ----
   const fmtMesAno = (aaaaMm) => {
     const [ano, mes] = String(aaaaMm || "").split("-");
     return ano && mes ? `${mes}/${ano.slice(2)}` : aaaaMm;
   };
+  const metaMensal = nac.orcamento_mensal || 0;
   const dadosEvolucao = (diag?.evolucao_frete || []).map((e) => ({
     mes: fmtMesAno(e.mes),
     frete_total: Number((e.frete_total || 0).toFixed(2)),
     frete_pct: Number((e.frete_pct || 0).toFixed(2)),
+    meta_pct: Number(metaPct.toFixed(2)),
+    meta_mensal: Number(metaMensal.toFixed(2)),
   }));
+  const dadosEvolucaoKg = (diag?.evolucao_frete || []).map((e) => ({
+    mes: fmtMesAno(e.mes),
+    frete_rs_kg: Number((e.frete_rs_kg || 0).toFixed(4)),
+    meta: Number(metaRsKg.toFixed(4)),
+  }));
+
+  // ---- 5e) Frete total por região, comparado ao orçamento do período (v6.11) ----
+  // orcamento_periodo = orçamento mensal da Meta Regional × meses do filtro
+  // aplicado (backend); None quando não há filtro de data ou a região não
+  // tem orçamento configurado — nesse caso a barra fica na cor padrão, sem
+  // linha de orçamento.
+  const dadosFreteRegiao = (diag?.regionais || []).map((r) => ({
+    nome: rotuloMacro(r.macro_regiao),
+    valor: Number((r.frete_total || 0).toFixed(2)),
+    orcamento: r.orcamento_periodo != null ? Number(r.orcamento_periodo.toFixed(2)) : null,
+    acima: r.orcamento_periodo != null && r.frete_total > r.orcamento_periodo,
+  }));
+  const temOrcamentoRegiao = dadosFreteRegiao.some((d) => d.orcamento != null);
 
   // ---- 6) Composição do frete (pizza) ----
   const dadosComposicao = Object.entries(diag?.composicao_frete || {})
@@ -224,14 +245,28 @@ export default function GraficosDiagnostico({ diag }) {
 
   return (
     <>
-      {/* Evolução mensal — Valor de Frete e % Frete (MELHORIA v6.10) */}
+      {/* Sequência dos indicadores (v6.11): 1) Evolução mensal de frete,
+          2) Evolução mensal de frete por kg, 3) Evolução mensal de % de
+          frete sobre valor mercadoria, 4) Frete por Região, 5) Frete por Kg,
+          6) % Frete / Valor Mercadoria. (7) Ranking de transportadoras vem
+          depois, em Dashboard.jsx. */}
       <Grid container spacing={2.5} sx={{ mt: 0.5 }}>
         <Grid item xs={12} md={6}>
-          <Painel titulo="Evolução do Valor de Frete" vazio={!dadosEvolucao.length} alturaMin={280}>
+          <Painel titulo="Evolução mensal de frete" vazio={!dadosEvolucao.length} alturaMin={280}>
             <ResponsiveContainer width="100%" height={280}>
-              <BarChart data={dadosEvolucao} margin={{ top: 24 }}>
-                <XAxis dataKey="mes" tick={{ fontSize: 12 }} axisLine={false} tickLine={false} />
-                <ReTooltip formatter={(v) => fmtMoeda(v)} contentStyle={{ borderRadius: 8 }} />
+              <ComposedChart data={dadosEvolucao} margin={{ top: 24 }}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#eee" />
+                <XAxis dataKey="mes" tick={{ fontSize: 12 }} />
+                <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
+                <ReTooltip
+                  formatter={(v, n) => [fmtMoeda(v), n === "frete_total" ? "Frete" : "Meta mensal"]}
+                  contentStyle={{ borderRadius: 8 }}
+                />
+                {metaMensal > 0 && (
+                  <Legend
+                    formatter={(v) => (v === "frete_total" ? "Frete Total" : "Meta mensal (R$)")}
+                  />
+                )}
                 <Bar dataKey="frete_total" fill={GD.blue} radius={[6, 6, 0, 0]} barSize={38}>
                   <LabelList
                     dataKey="frete_total"
@@ -240,16 +275,81 @@ export default function GraficosDiagnostico({ diag }) {
                     style={{ fontSize: 12, fontWeight: 700, fill: GD.ink }}
                   />
                 </Bar>
-              </BarChart>
+                {metaMensal > 0 && (
+                  <Line
+                    type="monotone"
+                    dataKey="meta_mensal"
+                    stroke={GD.amber}
+                    strokeWidth={3}
+                    strokeDasharray="5 4"
+                    dot={{ r: 4, fill: GD.amber }}
+                  />
+                )}
+              </ComposedChart>
             </ResponsiveContainer>
           </Painel>
         </Grid>
         <Grid item xs={12} md={6}>
-          <Painel titulo="Evolução do % Frete" vazio={!dadosEvolucao.length} alturaMin={280}>
+          <Painel
+            titulo="Evolução mensal de frete por kg"
+            vazio={!dadosEvolucaoKg.length}
+            alturaMin={280}
+          >
             <ResponsiveContainer width="100%" height={280}>
-              <BarChart data={dadosEvolucao} margin={{ top: 24 }}>
-                <XAxis dataKey="mes" tick={{ fontSize: 12 }} axisLine={false} tickLine={false} />
-                <ReTooltip formatter={(v) => fmtPct(v)} contentStyle={{ borderRadius: 8 }} />
+              <ComposedChart data={dadosEvolucaoKg} margin={{ top: 24 }}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#eee" />
+                <XAxis dataKey="mes" tick={{ fontSize: 11 }} />
+                <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `R$ ${v}`} />
+                <ReTooltip
+                  formatter={(v, n) => [fmtRsKg(v), n === "frete_rs_kg" ? "Frete" : "Meta"]}
+                  contentStyle={{ borderRadius: 8 }}
+                />
+                <Legend
+                  formatter={(v) => (v === "frete_rs_kg" ? "Frete (R$/kg)" : "Meta nacional (R$/kg)")}
+                />
+                <Bar dataKey="frete_rs_kg" fill={GD.blue} radius={[4, 4, 0, 0]} barSize={32}>
+                  <LabelList
+                    dataKey="frete_rs_kg"
+                    position="top"
+                    formatter={(v) => fmtRsKg(v)}
+                    style={{ fontSize: 10, fontWeight: 700, fill: GD.ink }}
+                  />
+                </Bar>
+                <Line
+                  type="monotone"
+                  dataKey="meta"
+                  stroke={GD.amber}
+                  strokeWidth={3}
+                  strokeDasharray="5 4"
+                  dot={{ r: 4, fill: GD.amber }}
+                />
+              </ComposedChart>
+            </ResponsiveContainer>
+          </Painel>
+        </Grid>
+      </Grid>
+
+      <Grid container spacing={2.5} sx={{ mt: 0.5 }}>
+        <Grid item xs={12} md={6}>
+          <Painel
+            titulo="Evolução mensal de % de frete sobre valor mercadoria"
+            vazio={!dadosEvolucao.length}
+            alturaMin={280}
+          >
+            <ResponsiveContainer width="100%" height={280}>
+              <ComposedChart data={dadosEvolucao} margin={{ top: 24 }}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#eee" />
+                <XAxis dataKey="mes" tick={{ fontSize: 12 }} />
+                <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `${v}%`} />
+                <ReTooltip
+                  formatter={(v, n) => [fmtPct(v), n === "frete_pct" ? "Frete" : "Meta"]}
+                  contentStyle={{ borderRadius: 8 }}
+                />
+                {metaPct > 0 && (
+                  <Legend
+                    formatter={(v) => (v === "frete_pct" ? "% Frete" : "Meta nacional (%)")}
+                  />
+                )}
                 <Bar dataKey="frete_pct" fill={GD.amberDark} radius={[6, 6, 0, 0]} barSize={38}>
                   <LabelList
                     dataKey="frete_pct"
@@ -258,24 +358,82 @@ export default function GraficosDiagnostico({ diag }) {
                     style={{ fontSize: 12, fontWeight: 700, fill: GD.ink }}
                   />
                 </Bar>
-              </BarChart>
+                {metaPct > 0 && (
+                  <Line
+                    type="monotone"
+                    dataKey="meta_pct"
+                    stroke={GD.amber}
+                    strokeWidth={3}
+                    strokeDasharray="5 4"
+                    dot={{ r: 4, fill: GD.amber }}
+                  />
+                )}
+              </ComposedChart>
+            </ResponsiveContainer>
+          </Painel>
+        </Grid>
+        <Grid item xs={12} md={6}>
+          <Painel
+            titulo="Frete por Região"
+            vazio={!dadosFreteRegiao.length}
+            alturaMin={280}
+          >
+            <ResponsiveContainer width="100%" height={280}>
+              <ComposedChart data={dadosFreteRegiao} margin={{ top: 20 }}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#eee" />
+                <XAxis dataKey="nome" tick={{ fontSize: 11 }} />
+                <YAxis
+                  tick={{ fontSize: 11 }}
+                  tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`}
+                />
+                <ReTooltip
+                  formatter={(v, n) => [fmtMoeda(v), n === "valor" ? "Frete" : "Orçamento"]}
+                  contentStyle={{ borderRadius: 8 }}
+                />
+                {temOrcamentoRegiao && (
+                  <Legend
+                    formatter={(v) => (v === "valor" ? "Frete (R$)" : "Orçamento do período (R$)")}
+                  />
+                )}
+                <Bar dataKey="valor" radius={[4, 4, 0, 0]} barSize={32}>
+                  {dadosFreteRegiao.map((d, i) => (
+                    <Cell key={i} fill={d.orcamento == null ? GD.indigo : d.acima ? GD.danger : GD.ok} />
+                  ))}
+                  <LabelList
+                    dataKey="valor"
+                    position="top"
+                    formatter={(v) => fmtMoeda(v)}
+                    style={{ fontSize: 10, fontWeight: 700, fill: GD.ink }}
+                  />
+                </Bar>
+                {temOrcamentoRegiao && (
+                  <Line
+                    type="monotone"
+                    dataKey="orcamento"
+                    stroke={GD.amber}
+                    strokeWidth={3}
+                    strokeDasharray="5 4"
+                    dot={{ r: 4, fill: GD.amber }}
+                  />
+                )}
+              </ComposedChart>
             </ResponsiveContainer>
           </Painel>
         </Grid>
       </Grid>
 
-      {/* Frete por Kg Regional e % Frete / Valor Mercadoria Regional — lado a
-          lado, tamanho reduzido (MELHORIA v6.10 — antes eram 2 painéis de
-          largura total, empilhados) */}
+      {/* Frete por Kg e % Frete / Valor Mercadoria — lado a lado, tamanho
+          reduzido (MELHORIA v6.10 — antes eram 2 painéis de largura total,
+          empilhados). Rótulos nas barras + títulos sem "Regional" (v6.11). */}
       <Grid container spacing={2.5} sx={{ mt: 0.5 }}>
         <Grid item xs={12} md={6}>
           <Painel
-            titulo="Frete por Kg Regional"
+            titulo="Frete por Kg"
             vazio={!dadosRegiaoCusto.length}
             alturaMin={260}
           >
             <ResponsiveContainer width="100%" height={260}>
-              <ComposedChart data={dadosRegiaoCusto}>
+              <ComposedChart data={dadosRegiaoCusto} margin={{ top: 20 }}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#eee" />
                 <XAxis dataKey="nome" tick={{ fontSize: 11 }} />
                 <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `R$ ${v}`} />
@@ -286,7 +444,14 @@ export default function GraficosDiagnostico({ diag }) {
                 <Legend
                   formatter={(v) => (v === "resultado" ? "Frete (R$/kg)" : "Meta (R$/kg)")}
                 />
-                <Bar dataKey="resultado" fill={GD.blue} radius={[4, 4, 0, 0]} barSize={32} />
+                <Bar dataKey="resultado" fill={GD.blue} radius={[4, 4, 0, 0]} barSize={32}>
+                  <LabelList
+                    dataKey="resultado"
+                    position="top"
+                    formatter={(v) => fmtRsKg(v)}
+                    style={{ fontSize: 10, fontWeight: 700, fill: GD.ink }}
+                  />
+                </Bar>
                 <Line
                   type="monotone"
                   dataKey="meta"
@@ -300,12 +465,12 @@ export default function GraficosDiagnostico({ diag }) {
         </Grid>
         <Grid item xs={12} md={6}>
           <Painel
-            titulo="% Frete / Valor Mercadoria Regional"
+            titulo="% Frete / Valor Mercadoria"
             vazio={!dadosPctRegiao.length}
             alturaMin={260}
           >
             <ResponsiveContainer width="100%" height={260}>
-              <ComposedChart data={dadosPctRegiao}>
+              <ComposedChart data={dadosPctRegiao} margin={{ top: 20 }}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#eee" />
                 <XAxis dataKey="nome" tick={{ fontSize: 11 }} />
                 <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `${v}%`} />
@@ -316,7 +481,14 @@ export default function GraficosDiagnostico({ diag }) {
                 <Legend
                   formatter={(v) => (v === "resultado" ? "Frete (%)" : "Meta (%)")}
                 />
-                <Bar dataKey="resultado" fill={GD.blue} radius={[4, 4, 0, 0]} barSize={32} />
+                <Bar dataKey="resultado" fill={GD.blue} radius={[4, 4, 0, 0]} barSize={32}>
+                  <LabelList
+                    dataKey="resultado"
+                    position="top"
+                    formatter={(v) => fmtPct(v, 1)}
+                    style={{ fontSize: 10, fontWeight: 700, fill: GD.ink }}
+                  />
+                </Bar>
                 <Line
                   type="monotone"
                   dataKey="meta"

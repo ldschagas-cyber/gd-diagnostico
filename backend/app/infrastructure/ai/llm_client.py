@@ -1,4 +1,4 @@
-"""Camada de abstração de LLM para o GD Frete Diagnóstico V4.
+"""Camada de abstração de LLM para o GD Diagnóstico Logístico V4.
 
 Suporta:
 - Modo simulado (mock) — sem custo de API, para desenvolvimento sem chaves

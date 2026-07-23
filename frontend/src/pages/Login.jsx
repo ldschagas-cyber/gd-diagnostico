@@ -106,7 +106,17 @@ export default function Login() {
       </Box>
 
       {/* Formulário */}
-      <Box sx={{ display: "grid", placeItems: "center", p: { xs: 3, sm: 6 } }}>
+      <Box
+        sx={{
+          display: "flex",
+          flexDirection: "column",
+          justifyContent: "space-between",
+          alignItems: "center",
+          p: { xs: 3, sm: 6 },
+        }}
+      >
+        <Box /> {/* espaçador — alinha o card à mesma altura do bloco de texto no painel de marca */}
+
         <Paper variant="outlined" sx={{ p: { xs: 3, sm: 5 }, width: "100%", maxWidth: 420 }}>
           <Typography variant="h5" sx={{ fontWeight: 700, mb: 0.5 }}>
             Entrar
@@ -168,6 +178,10 @@ export default function Login() {
             Acesso inicial: admin@gdconecta.com.br
           </Typography>
         </Paper>
+
+        <Typography variant="caption" color="text.secondary">
+          GD Conecta © {new Date().getFullYear()}
+        </Typography>
       </Box>
     </Box>
   );

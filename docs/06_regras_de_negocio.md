@@ -14,6 +14,7 @@
 | RN-06 | Importação via Excel usa chave sintética `EXCEL-{empresa_id}-{nota_fiscal}-{linha}` para deduplicação, evitando colisão entre notas de mesmo número de empresas (ou linhas) diferentes. |
 | RN-07 | Limites de upload: XML — máx. 500 arquivos por lote, 10 MB por arquivo; Excel — máx. 20 MB por arquivo; validação de assinatura (magic bytes) antes de processar. |
 | RN-08 | Cancelamento de CT-e: evento aceito apenas se homologado pela SEFAZ; localizado pela chave no escopo da empresa; duplicidade (CT-e já cancelado ou evento repetido) é registrada sem interromper o lote. |
+| RN-08a | Carta de Correção (CCe, tpEvento 110110): reconhecida e registrada no log de auditoria (mesma tabela do cancelamento, `resultado` prefixado `CCE_`), mas **nunca aplicada automaticamente** ao CT-e já importado — nenhum campo do CT-e é alterado. Motivo: a CCe é disciplinada pelo Art. 58-B do Convênio SINIEF 06/89 e não deveria, por regra, corrigir variáveis que determinam o valor da prestação (ex.: quantidade/peso de carga) — na prática, porém, emissores usam a CCe para isso, então a correção proposta fica registrada para revisão manual do analista (v6.11.0). |
 
 ## Diagnóstico e indicadores
 

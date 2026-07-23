@@ -13,7 +13,6 @@ import {
   benchmarkApi,
   dashboardApi,
   dlgApi,
-  inteligenciaApi,
   recomendacoesApi,
   transportadorasApi,
 } from "../api/endpoints";
@@ -50,14 +49,9 @@ export function usePrefetch() {
             transportadorasApi.listar(empresaAtivaId)
           );
           break;
-        case "/benchmark/diagnostico":
+        case "/benchmark/comparativo-mercado":
           pre(qk.benchmarkNacional(empresaAtivaId, {}), () =>
             benchmarkApi.nacional(empresaAtivaId)
-          );
-          break;
-        case "/inteligencia":
-          pre(qk.iaDashboard(empresaAtivaId), () =>
-            inteligenciaApi.dashboard(empresaAtivaId)
           );
           break;
         default:

@@ -15,7 +15,7 @@ export const fmtNumero = (v, casas = 2) =>
 
 export const fmtPct = (v, casas = 2) => `${fmtNumero(v, casas)}%`;
 
-export const fmtRsKg = (v) => `R$ ${fmtNumero(v, 4)}/kg`;
+export const fmtRsKg = (v) => `R$ ${fmtNumero(v, 2)}/kg`;
 
 // Máscara visual de CNPJ: 00.000.000/0000-00
 export function mascararCnpj(valor) {

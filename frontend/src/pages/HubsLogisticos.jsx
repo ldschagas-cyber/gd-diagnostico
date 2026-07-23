@@ -12,6 +12,7 @@ import DownloadIcon from "@mui/icons-material/Download";
 import UploadFileIcon from "@mui/icons-material/UploadFile";
 import HubIcon from "@mui/icons-material/Hub";
 import RouteIcon from "@mui/icons-material/Route";
+import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
 import PageHeader from "../components/PageHeader";
 import { VazioEstado } from "../components/Tabela";
 import ConfirmDialog from "../components/ConfirmDialog";
@@ -22,23 +23,46 @@ import {
   useHubs, useMutacoesHub, useClusters, useMutacoesCluster,
   useCorredoresRef, useMutacoesCorredorRef,
 } from "../api/queries";
-import { clustersApi } from "../api/endpoints";
+import { clustersApi, corredoresApi } from "../api/endpoints";
 import { extrairErro } from "../api/client";
 import { UFS } from "../utils/format";
 
+// Separador de grupo dentro da grade compacta de campos numéricos (aba
+// Parâmetros de Hubs) — ocupa a linha inteira (gridColumn 1/-1), o que força
+// o próximo grupo a começar numa linha nova mesmo sem célula vazia extra.
+function SeparadorGrupo({ texto }) {
+  return (
+    <Box sx={{ gridColumn: "1 / -1", display: "flex", alignItems: "center", gap: 1.25, mt: 0.5 }}>
+      <Typography variant="overline" color="text.secondary" sx={{ whiteSpace: "nowrap" }}>
+        {texto}
+      </Typography>
+      <Divider sx={{ flex: 1 }} />
+    </Box>
+  );
+}
+
 function AbaHubs() {
   const { usuario } = useAuth();
+  const { empresaAtiva, empresaAtivaId } = useEmpresa();
   const { sucesso, erro: erroToast } = useFeedback();
-  const podeEscrever = Boolean(usuario?.is_superuser);
+  const podeEscrever = usuario?.role !== "VISUALIZADOR";
 
-  const { data: hubs = [], isLoading: carregando, error } = useHubs(false);
-  const { criar, atualizar, remover: removerMut } = useMutacoesHub();
+  const { data: hubs = [], isLoading: carregando, error } = useHubs(empresaAtivaId, false);
+  const { criar, atualizar, remover: removerMut } = useMutacoesHub(empresaAtivaId);
   const [dialogo, setDialogo] = useState(false);
   const [editando, setEditando] = useState(null);
   const [form, setForm] = useState({ codigo: "", nome: "", descricao: "", ativo: true });
   const [confirmar, setConfirmar] = useState(null);
 
   if (error) erroToast(extrairErro(error));
+
+  if (!empresaAtivaId) {
+    return (
+      <Box sx={{ pt: 2.5 }}>
+        <VazioEstado mensagem="Selecione uma empresa" />
+      </Box>
+    );
+  }
 
   const abrirNovo = () => {
     setEditando(null);
@@ -82,8 +106,9 @@ function AbaHubs() {
   return (
     <Box sx={{ pt: 2.5 }}>
       <Alert severity="info" icon={<HubIcon />} sx={{ mb: 2.5 }}>
-        Catálogo global de hubs — vale para toda a plataforma, não só para esta empresa.
-        {!podeEscrever && " Somente um superusuário pode criar, editar ou remover hubs."}
+        Catálogo de hubs de <strong>{empresaAtiva?.nome_fantasia || empresaAtiva?.razao_social}</strong> —
+        próprio desta empresa, não é compartilhado com outras.
+        {!podeEscrever && " Seu perfil é somente leitura e não permite criar, editar ou remover hubs."}
       </Alert>
 
       {podeEscrever && (
@@ -202,7 +227,7 @@ function AbaMapeamento() {
   const { sucesso, erro: erroToast } = useFeedback();
   const fileRef = useRef(null);
 
-  const { data: hubs = [] } = useHubs(true);
+  const { data: hubs = [] } = useHubs(empresaAtivaId, true);
   const { data: lista = [], isLoading: carregando, error } = useClusters(empresaAtivaId);
   const { criar, remover: removerMut, importarExcel: importarExcelMut } = useMutacoesCluster(empresaAtivaId);
   const [novo, setNovo] = useState({ uf: "", municipio: "", hub_id: "" });
@@ -289,36 +314,47 @@ function AbaMapeamento() {
       <Card sx={{ mb: 2.5 }}>
         <CardContent>
           <Typography variant="h6" sx={{ mb: 2 }}>Nova regra de mapeamento</Typography>
-          <Stack direction={{ xs: "column", md: "row" }} spacing={2} alignItems={{ md: "center" }}>
+          <Box
+            sx={{
+              display: "grid",
+              gridTemplateColumns: { xs: "1fr", md: "140px 1.4fr 1.4fr auto" },
+              gap: 2,
+              alignItems: "start",
+            }}
+          >
             <Autocomplete
               options={UFS}
               value={novo.uf || null}
               onChange={(_, v) => setNovo((p) => ({ ...p, uf: v || "" }))}
-              renderInput={(params) => <TextField {...params} label="UF" />}
-              sx={{ width: 120 }}
+              renderInput={(params) => <TextField {...params} label="UF" helperText=" " />}
+              sx={{ width: "100%" }}
             />
             <TextField
               label="Município (opcional)"
               value={novo.municipio}
               onChange={(e) => setNovo((p) => ({ ...p, municipio: e.target.value }))}
               helperText="Vazio = vale para toda a UF"
-              sx={{ minWidth: 240 }}
             />
             <TextField
               select
               label="Hub"
               value={novo.hub_id}
               onChange={(e) => setNovo((p) => ({ ...p, hub_id: e.target.value }))}
-              sx={{ minWidth: 240 }}
+              helperText=" "
             >
               {hubs.map((h) => (
                 <MenuItem key={h.id} value={h.id}>{h.nome}</MenuItem>
               ))}
             </TextField>
-            <Button variant="contained" onClick={adicionar} disabled={salvando}>
+            <Button
+              variant="contained"
+              onClick={adicionar}
+              disabled={salvando}
+              sx={{ height: 40, width: { xs: "100%", md: "auto" } }}
+            >
               Adicionar
             </Button>
-          </Stack>
+          </Box>
         </CardContent>
       </Card>
 
@@ -368,20 +404,48 @@ const CORREDOR_VAZIO = {
   hub_origem_codigo: "", hub_destino_codigo: "",
   frete_kg_min: 0, frete_kg_medio: 0, frete_kg_max: 0,
   frete_pct_min: 0, frete_pct_medio: 0, frete_pct_max: 0,
-  volume_referencia: 0, dispersao_kg: 0, observacoes: "",
+  volume_referencia: 0, dispersao_kg: 0, prazo_dias_medio: 0, observacoes: "",
 };
 
 function AbaCorredor() {
   const { usuario } = useAuth();
+  const { empresaAtivaId } = useEmpresa();
   const { sucesso, erro: erroToast } = useFeedback();
-  const podeEscrever = Boolean(usuario?.is_superuser);
+  const podeEscrever = usuario?.role !== "VISUALIZADOR";
+  const fileRef = useRef(null);
 
-  const { data: hubs = [] } = useHubs(true);
-  const { data: lista = [], isLoading: carregando, error } = useCorredoresRef();
-  const { salvar: salvarMut, remover: removerMut } = useMutacoesCorredorRef();
+  const { data: hubs = [] } = useHubs(empresaAtivaId, true);
+  const { data: lista = [], isLoading: carregando, error } = useCorredoresRef(empresaAtivaId);
+  const { salvar: salvarMut, remover: removerMut, importarExcel: importarExcelMut } = useMutacoesCorredorRef(empresaAtivaId);
   const [form, setForm] = useState(CORREDOR_VAZIO);
 
   if (error) erroToast(extrairErro(error));
+
+  const baixarModelo = async () => {
+    try {
+      await corredoresApi.baixarModelo(empresaAtivaId);
+    } catch (e) { erroToast(extrairErro(e)); }
+  };
+
+  const importarExcel = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = "";
+    try {
+      const r = await importarExcelMut.mutateAsync(file);
+      const partes = [`${r.importados} novo(s)`, `${r.atualizados} atualizado(s)`];
+      if (r.ignorados > 0) partes.push(`${r.ignorados} ignorado(s) (hub inválido)`);
+      sucesso(`Importação concluída: ${partes.join(" · ")}.`);
+    } catch (ex) { erroToast(extrairErro(ex)); }
+  };
+
+  if (!empresaAtivaId) {
+    return (
+      <Box sx={{ pt: 2.5 }}>
+        <VazioEstado mensagem="Selecione uma empresa" />
+      </Box>
+    );
+  }
 
   const nomeHub = useCallback(
     (cod) => hubs.find((h) => h.codigo === cod)?.nome || cod,
@@ -408,6 +472,7 @@ function AbaCorredor() {
         frete_pct_max: Number(form.frete_pct_max) || 0,
         volume_referencia: Number(form.volume_referencia) || 0,
         dispersao_kg: Number(form.dispersao_kg) || 0,
+        prazo_dias_medio: Number(form.prazo_dias_medio) || 0,
       };
       await salvarMut.mutateAsync(payload);
       sucesso("Referência de corredor salva.");
@@ -428,10 +493,10 @@ function AbaCorredor() {
     }
   };
 
-  const num = (campo, adorno, fim = false) => (
+  const num = (campo, label, adorno, fim = false) => (
     <TextField
-      type="number" size="small" value={form[campo] ?? 0}
-      onChange={(e) => set(campo, e.target.value)} sx={{ width: 110 }}
+      label={label} type="number" size="small" value={form[campo] ?? 0}
+      onChange={(e) => set(campo, e.target.value)}
       InputProps={fim
         ? { endAdornment: <InputAdornment position="end">{adorno}</InputAdornment> }
         : { startAdornment: <InputAdornment position="start">{adorno}</InputAdornment> }}
@@ -441,10 +506,22 @@ function AbaCorredor() {
   return (
     <Box sx={{ pt: 2.5 }}>
       <Alert severity="info" icon={<RouteIcon />} sx={{ mb: 2.5 }}>
-        Referência de mercado por corredor (Hub origem → Hub destino) — <strong>global</strong>,
+        Referência de mercado por corredor (Hub origem → Hub destino) desta empresa,
         usada como detalhamento "por corredor" dentro do Potencial de Economia.
-        {!podeEscrever && " Somente um superusuário pode criar, editar ou remover referências."}
+        {!podeEscrever && " Seu perfil é somente leitura e não permite criar, editar ou remover referências."}
       </Alert>
+
+      {podeEscrever && (
+        <Stack direction="row" spacing={1} sx={{ mb: 2 }}>
+          <Button variant="outlined" startIcon={<DownloadIcon />} onClick={baixarModelo}>
+            Baixar modelo
+          </Button>
+          <Button variant="outlined" startIcon={<UploadFileIcon />} onClick={() => fileRef.current?.click()}>
+            Importar Excel
+          </Button>
+          <input ref={fileRef} type="file" accept=".xlsx" hidden onChange={importarExcel} />
+        </Stack>
+      )}
 
       {carregando && <LinearProgress sx={{ mb: 2 }} />}
 
@@ -455,39 +532,82 @@ function AbaCorredor() {
             <Stack spacing={2}>
               <Stack direction={{ xs: "column", md: "row" }} spacing={2}>
                 <TextField select label="Hub de origem" value={form.hub_origem_codigo}
-                  onChange={(e) => set("hub_origem_codigo", e.target.value)} sx={{ minWidth: 220 }}>
+                  onChange={(e) => set("hub_origem_codigo", e.target.value)}
+                  sx={{ width: { xs: "100%", md: "auto" }, minWidth: { md: 280 }, maxWidth: { md: 400 } }}>
                   {hubs.map((h) => <MenuItem key={h.id} value={h.codigo}>{h.nome}</MenuItem>)}
                 </TextField>
                 <TextField select label="Hub de destino" value={form.hub_destino_codigo}
-                  onChange={(e) => set("hub_destino_codigo", e.target.value)} sx={{ minWidth: 220 }}>
+                  onChange={(e) => set("hub_destino_codigo", e.target.value)}
+                  sx={{ width: { xs: "100%", md: "auto" }, minWidth: { md: 280 }, maxWidth: { md: 400 } }}>
                   {hubs.map((h) => <MenuItem key={h.id} value={h.codigo}>{h.nome}</MenuItem>)}
                 </TextField>
               </Stack>
-              <Box>
-                <Typography variant="overline" color="text.secondary">Frete por kg (R$)</Typography>
-                <Stack direction="row" spacing={1.5} sx={{ mt: 0.5 }}>
-                  {num("frete_kg_min", "R$")}{num("frete_kg_medio", "R$")}{num("frete_kg_max", "R$")}
-                </Stack>
+              <Box
+                sx={{
+                  display: "grid",
+                  gridTemplateColumns: { xs: "repeat(3, 1fr)", md: "repeat(6, 1fr)" },
+                  gap: 2,
+                }}
+              >
+                <SeparadorGrupo texto="R$/KG" />
+                {num("frete_kg_min", "Mín.", "R$")}
+                {num("frete_kg_medio", "Médio", "R$")}
+                {num("frete_kg_max", "Máx.", "R$")}
+
+                <SeparadorGrupo texto="% MERCADORIA" />
+                {num("frete_pct_min", "Mín.", "%", true)}
+                {num("frete_pct_medio", "Médio", "%", true)}
+                {num("frete_pct_max", "Máx.", "%", true)}
+
+                <SeparadorGrupo texto="METADADOS" />
+                <Box sx={{ gridColumn: { xs: "1 / -1", md: "span 2" } }}>
+                  <TextField
+                    type="number" label="Volume de referência" size="small"
+                    value={form.volume_referencia} onChange={(e) => set("volume_referencia", e.target.value)}
+                    InputProps={{
+                      endAdornment: (
+                        <InputAdornment position="end">
+                          <Tooltip title="peso de mercado do fluxo">
+                            <InfoOutlinedIcon sx={{ fontSize: 16, color: "text.secondary" }} />
+                          </Tooltip>
+                        </InputAdornment>
+                      ),
+                    }}
+                  />
+                </Box>
+                <Box sx={{ gridColumn: { xs: "1 / -1", md: "auto" } }}>
+                  <TextField
+                    type="number" label="Dispersão (0–1)" size="small"
+                    value={form.dispersao_kg} onChange={(e) => set("dispersao_kg", e.target.value)}
+                    inputProps={{ step: 0.05, min: 0, max: 1 }}
+                  />
+                </Box>
+                <Box sx={{ gridColumn: { xs: "1 / -1", md: "auto" } }}>
+                  <TextField
+                    type="number" label="Prazo (dias)" size="small"
+                    value={form.prazo_dias_medio} onChange={(e) => set("prazo_dias_medio", e.target.value)}
+                    InputProps={{
+                      endAdornment: (
+                        <InputAdornment position="end">
+                          <Tooltip title="prazo de entrega de referência do corredor — usado pelo Simulador de Hub">
+                            <InfoOutlinedIcon sx={{ fontSize: 16, color: "text.secondary" }} />
+                          </Tooltip>
+                        </InputAdornment>
+                      ),
+                    }}
+                    inputProps={{ min: 0 }}
+                  />
+                </Box>
+                <Box sx={{ gridColumn: { xs: "1 / -1", md: "span 2" } }}>
+                  <TextField
+                    label="Observações" size="small" value={form.observacoes}
+                    onChange={(e) => set("observacoes", e.target.value)}
+                  />
+                </Box>
               </Box>
-              <Box>
-                <Typography variant="overline" color="text.secondary">Frete sobre mercadoria (%)</Typography>
-                <Stack direction="row" spacing={1.5} sx={{ mt: 0.5 }}>
-                  {num("frete_pct_min", "%", true)}{num("frete_pct_medio", "%", true)}{num("frete_pct_max", "%", true)}
-                </Stack>
-              </Box>
-              <Stack direction={{ xs: "column", md: "row" }} spacing={2} alignItems={{ md: "center" }}>
-                <TextField type="number" label="Volume de referência" size="small"
-                  value={form.volume_referencia} onChange={(e) => set("volume_referencia", e.target.value)}
-                  helperText="peso de mercado do fluxo" sx={{ width: 200 }} />
-                <TextField type="number" label="Dispersão (0–1)" size="small"
-                  value={form.dispersao_kg} onChange={(e) => set("dispersao_kg", e.target.value)}
-                  inputProps={{ step: 0.05, min: 0, max: 1 }} sx={{ width: 160 }} />
-                <TextField label="Observações" size="small" value={form.observacoes}
-                  onChange={(e) => set("observacoes", e.target.value)} sx={{ flex: 1, minWidth: 200 }} />
-              </Stack>
               <Box>
                 <Button variant="contained" onClick={salvar} disabled={salvando}>
-                  {form.id ? "Atualizar" : "Salvar"} referência
+                  {form.id ? "Atualizar" : "Salvar"}
                 </Button>
                 {form.id && (
                   <Button sx={{ ml: 1 }} onClick={() => setForm(CORREDOR_VAZIO)}>Cancelar edição</Button>
@@ -512,6 +632,7 @@ function AbaCorredor() {
                     <TableCell align="right">R$/kg (mín/méd/máx)</TableCell>
                     <TableCell align="right">% (mín/méd/máx)</TableCell>
                     <TableCell align="right">Disp.</TableCell>
+                    <TableCell align="right">Prazo</TableCell>
                     {podeEscrever && <TableCell align="right">Ações</TableCell>}
                   </TableRow>
                 </TableHead>
@@ -528,6 +649,9 @@ function AbaCorredor() {
                         {c.frete_pct_min} / {c.frete_pct_medio} / {c.frete_pct_max}
                       </TableCell>
                       <TableCell align="right" onClick={() => editar(c)}>{c.dispersao_kg}</TableCell>
+                      <TableCell align="right" onClick={() => editar(c)}>
+                        {c.prazo_dias_medio > 0 ? `${c.prazo_dias_medio}d` : <em style={{ color: "#888" }}>—</em>}
+                      </TableCell>
                       {podeEscrever && (
                         <TableCell align="right">
                           <IconButton size="small" color="error" onClick={() => remover(c.id)}>
@@ -562,14 +686,14 @@ export default function HubsLogisticos() {
     <Box>
       <PageHeader
         titulo="Hubs Logísticos"
-        subtitulo="Configuração › catálogo de hubs, mapeamento cliente→hub e referência de mercado por corredor"
+        subtitulo="Parâmetros › catálogo de hubs, mapeamento cliente→hub e referência de mercado por corredor"
       />
 
       <Card>
         <Tabs value={aba} onChange={(_, v) => setAba(v)} sx={{ px: 2, borderBottom: 1, borderColor: "divider" }}>
           <Tab label="Hubs" />
-          <Tab label="Mapeamento Cliente → Hub" />
-          <Tab label="Referência de Corredor" />
+          <Tab label="Mapeamento Hubs" />
+          <Tab label="Parâmetros de Hubs" />
         </Tabs>
         <CardContent>
           {aba === 0 && <AbaHubs />}

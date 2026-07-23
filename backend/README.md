@@ -1,6 +1,6 @@
-# GD Frete Diagnóstico — Backend (API)
+# GD Diagnóstico Logístico — Backend (API)
 
-API REST do **GD Frete Diagnóstico**, construída em **FastAPI** com **Clean Architecture** (domínio → aplicação → infraestrutura → apresentação). Versão atual: **6.5.1**.
+API REST do **GD Diagnóstico Logístico**, construída em **FastAPI** com **Clean Architecture** (domínio → aplicação → infraestrutura → apresentação). Versão atual: **6.5.1**.
 
 > Este README cobre o essencial para rodar e navegar o backend localmente. A documentação completa e oficial do projeto (especificação funcional, arquitetura, modelo de dados, catálogo de API, regras de negócio, deploy) está em [`../docs/00_README.md`](../docs/00_README.md) — comece por lá para qualquer coisa além do dia a dia de desenvolvimento.
 

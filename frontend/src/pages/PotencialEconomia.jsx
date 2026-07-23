@@ -9,7 +9,7 @@ import PageHeader from "../components/PageHeader";
 import { VazioEstado } from "../components/Tabela";
 import { useEmpresa } from "../contexts/EmpresaContext";
 import { useBenchmarkEconomia, useSimuladorEconomia, useTransportadoras } from "../api/queries";
-import { useTelaEstado } from "../hooks/useTelaEstado";
+import { useTelaEstado, useBenchmarkPeriodo } from "../hooks/useTelaEstado";
 import { extrairErro } from "../api/client";
 import { fmtMoeda, fmtNumero, fmtPct, fmtRsKg, rotuloMacro } from "../utils/format";
 import { GD } from "../theme";
@@ -130,12 +130,13 @@ function CardProjecao({ titulo, valor, destaque }) {
 
 export default function PotencialEconomia() {
   const { empresaAtiva, empresaAtivaId } = useEmpresa();
-  const [tela, , patch] = useTelaEstado("benchmark-economia", {
-    dataInicio: "", dataFim: "", cenario: "P50",
-  });
-  const { dataInicio, dataFim, cenario } = tela;
-  const setDataInicio = (v) => patch({ dataInicio: v });
-  const setDataFim = (v) => patch({ dataFim: v });
+  const [periodo, , patchPeriodo] = useBenchmarkPeriodo();
+  const { dataInicio, dataFim } = periodo;
+  const setDataInicio = (v) => patchPeriodo({ dataInicio: v });
+  const setDataFim = (v) => patchPeriodo({ dataFim: v });
+
+  const [tela, , patch] = useTelaEstado("benchmark-economia", { cenario: "P50" });
+  const { cenario } = tela;
   const setCenario = (v) => patch({ cenario: v });
 
   const params = {};
@@ -242,8 +243,8 @@ export default function PotencialEconomia() {
                         <TableCell sx={{ fontWeight: 600 }}>{rotuloMacro(r.macro_regiao)}</TableCell>
                         <TableCell align="right">{fmtMoeda(r.frete_total)}</TableCell>
                         <TableCell align="right">{fmtNumero(r.peso_total, 0)}</TableCell>
-                        <TableCell align="right">{fmtNumero(r.frete_rs_kg, 4)}</TableCell>
-                        <TableCell align="right">{fmtNumero(r.benchmark_medio, 4)}</TableCell>
+                        <TableCell align="right">{fmtNumero(r.frete_rs_kg, 2)}</TableCell>
+                        <TableCell align="right">{fmtNumero(r.benchmark_medio, 2)}</TableCell>
                         <TableCell align="right" sx={{ fontWeight: 700, color: r.economia > 0 ? GD.danger : GD.ok }}>
                           {fmtMoeda(r.economia)}
                         </TableCell>

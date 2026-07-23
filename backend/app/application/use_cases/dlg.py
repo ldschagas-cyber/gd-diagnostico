@@ -130,6 +130,20 @@ def _tem_janela_curta(
     return False
 
 
+_ACAO_RECOMENDADA_FRAGMENTACAO = (
+    "Consolidar despachos deste cliente: agrupar pedidos dentro da mesma janela de "
+    "coleta para reduzir o nº de CT-es e aumentar o peso médio por despacho."
+)
+
+
+def _acao_recomendada_adicionais(componente_top: Optional[str]) -> str:
+    alvo = f"o componente {componente_top}" if componente_top else "os componentes adicionais"
+    return (
+        f"Renegociar {alvo} com a transportadora — verificar se o adicional está "
+        "sendo aplicado corretamente ou pode ser reduzido/eliminado."
+    )
+
+
 def _diagnosticar_causa(
     pct_adicionais: Optional[float],
     limiar_adicionais_pct: float,
@@ -141,6 +155,10 @@ def _diagnosticar_causa(
     Determinístico — nunca inventa causa quando nenhum sinal está presente
     (OBJ-9): retorna "NENHUMA" e o chamador usa a linguagem genérica de
     desvio de benchmark já existente (RN-25).
+
+    Além da causa, retorna `acao_recomendada`: uma instrução prescritiva
+    (o que fazer), não apenas descritiva (o que está acontecendo) — cada
+    causa tem uma correção específica em vez do genérico "investigar causa".
     """
     tem_adicionais = pct_adicionais is not None and pct_adicionais > limiar_adicionais_pct
     if tem_adicionais and tem_fragmentacao:
@@ -152,7 +170,19 @@ def _diagnosticar_causa(
     else:
         causa = "NENHUMA"
     componente_top = ranking_componentes[0] if (tem_adicionais and ranking_componentes) else None
-    return {"causa": causa, "componente_top": componente_top}
+
+    if causa == "FRAGMENTACAO":
+        acao_recomendada = _ACAO_RECOMENDADA_FRAGMENTACAO
+    elif causa == "ADICIONAIS":
+        acao_recomendada = _acao_recomendada_adicionais(componente_top)
+    elif causa == "AMBAS":
+        acao_recomendada = (
+            _acao_recomendada_adicionais(componente_top) + " " + _ACAO_RECOMENDADA_FRAGMENTACAO
+        )
+    else:
+        acao_recomendada = "Investigar causa e avaliar ação comercial."
+
+    return {"causa": causa, "componente_top": componente_top, "acao_recomendada": acao_recomendada}
 
 
 def _campo(row, nome: str):
@@ -210,6 +240,20 @@ class DlgUseCase:
         self.db = db
 
     # ── ponto de entrada público ───────────────────────────────────────────────
+
+    def limpar_e_reprocessar(self, empresa_id: int) -> Dict:
+        """Chame após excluir CT-e(s) da empresa (fora do fluxo normal de
+        importação). `processar()` sozinho não serve para isso: ele só limpa
+        `dlg_analitico`/`dlg_outliers` dos períodos que ainda têm CT-e
+        remanescente (RN de idempotência por período) — se TODOS os CT-es de
+        um período/filial forem excluídos, a linha antiga fica órfã para
+        sempre, mostrando uma contagem que não existe mais. Aqui zera tudo
+        antes de reprocessar do zero a partir do que sobrou.
+        """
+        self.db.execute(delete(DlgAnaliticoModel).where(DlgAnaliticoModel.empresa_id == empresa_id))
+        self.db.execute(delete(DlgOutlierModel).where(DlgOutlierModel.empresa_id == empresa_id))
+        self.db.commit()
+        return self.processar(empresa_id)
 
     def processar(
         self,
@@ -293,10 +337,14 @@ class DlgUseCase:
 
     def _carregar_referencias(self, empresa_id: int) -> Dict:
         """Retorna refs de benchmark indexadas por dimensão/chave."""
-        meta_nac = self.db.scalar(select(MetaNacionalModel))
+        meta_nac = self.db.scalar(
+            select(MetaNacionalModel).where(MetaNacionalModel.empresa_id == empresa_id)
+        )
         metas_reg = {
             (m.macro_regiao.value if hasattr(m.macro_regiao, "value") else m.macro_regiao): m
-            for m in self.db.scalars(select(MetaRegionalModel)).all()
+            for m in self.db.scalars(
+                select(MetaRegionalModel).where(MetaRegionalModel.empresa_id == empresa_id)
+            ).all()
         }
         # benchmark_mercado (Matriz Benchmark OD): p50 por região de destino —
         # fonte única de mercado (v6.9); substitui o antigo dict de BenchmarkModel (V1).
@@ -313,7 +361,9 @@ class DlgUseCase:
 
     def _limite_pct_frete(self, empresa_id: int) -> float:
         """Limite de % frete para outlier (CFG = meta_pct_frete nacional × 1,5)."""
-        meta = self.db.scalar(select(MetaNacionalModel))
+        meta = self.db.scalar(
+            select(MetaNacionalModel).where(MetaNacionalModel.empresa_id == empresa_id)
+        )
         return (meta.meta_pct_frete * 1.5) if meta and meta.meta_pct_frete else 15.0
 
     def _nomes_transportadoras(self, empresa_id: int) -> Dict[int, str]:
@@ -865,6 +915,7 @@ class DlgUseCase:
                 _definir_campo(r, "sinal_fragmentacao", tem_fragmentacao)
                 _definir_campo(r, "causa_dominante", diag["causa"])
                 _definir_campo(r, "causa_detalhe", diag)
+                _definir_campo(r, "acao_recomendada", diag["acao_recomendada"])
 
     def _datas_por_cliente(
         self,
@@ -990,8 +1041,22 @@ class DlgUseCase:
         data_inicio: Optional[date] = None,
         data_fim: Optional[date] = None,
     ) -> List[DlgOutlierModel]:
-        stmt = select(DlgOutlierModel).where(
-            DlgOutlierModel.empresa_id == empresa_id
+        """Retorna os DlgOutlierModel do período, com `transportadora`,
+        `valor_mercadoria` e `peso` do CT-e associado anexados dinamicamente
+        (não são colunas do modelo) para dar contexto de triagem na aba
+        Outliers sem quebrar consumidores existentes (relatórios), que só
+        leem as colunas mapeadas originais."""
+        stmt = (
+            select(
+                DlgOutlierModel,
+                CTeModel.valor_mercadoria,
+                CTeModel.peso,
+                TransportadoraModel.nome_fantasia,
+                TransportadoraModel.razao_social,
+            )
+            .join(CTeModel, CTeModel.id == DlgOutlierModel.cte_id)
+            .outerjoin(TransportadoraModel, TransportadoraModel.id == CTeModel.transportadora_id)
+            .where(DlgOutlierModel.empresa_id == empresa_id)
         )
         if periodo_ref:
             stmt = stmt.where(DlgOutlierModel.periodo_ref == periodo_ref)
@@ -1002,7 +1067,14 @@ class DlgUseCase:
         if tipo:
             stmt = stmt.where(DlgOutlierModel.tipo_outlier == tipo.upper())
         stmt = stmt.order_by(DlgOutlierModel.desvio_pct.desc())
-        return list(self.db.scalars(stmt).all())
+
+        resultado: List[DlgOutlierModel] = []
+        for outlier, valor_mercadoria, peso, nome_fantasia, razao_social in self.db.execute(stmt).all():
+            outlier.transportadora = nome_fantasia or razao_social or "Não identificada"
+            outlier.valor_mercadoria = valor_mercadoria
+            outlier.peso = peso
+            resultado.append(outlier)
+        return resultado
 
     def resumo(
         self,

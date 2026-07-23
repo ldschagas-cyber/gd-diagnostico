@@ -14,6 +14,7 @@ from app.application.use_cases.benchmark import BenchmarkUseCase
 from app.application.use_cases.benchmark_dashboard import BenchmarkDashboardUseCase
 from app.application.use_cases.benchmark_od import BenchmarkODUseCase
 from app.application.use_cases.diagnostico import DiagnosticoUseCase
+from app.application.use_cases.simulador_hub import SimuladorHubUseCase
 from app.core.database import get_db
 from app.presentation.api.dependencies import (
     get_benchmark_corredor_repo,
@@ -26,6 +27,7 @@ from app.presentation.api.dependencies import (
     get_hub_repo,
     get_meta_nacional_repo,
     get_meta_regional_repo,
+    get_simulador_hub_uc,
     get_transportadora_repo,
 )
 from app.presentation.schemas import (
@@ -35,6 +37,7 @@ from app.presentation.schemas import (
     BenchmarkTransportadoraItemOut,
     DashboardExecutivoOut,
     PotencialEconomiaOut,
+    SimulacaoHubResultadoOut,
 )
 
 router = APIRouter(prefix="/benchmark", tags=["Benchmark — Análise"])
@@ -89,6 +92,7 @@ def benchmark_nacional(
     data_inicio: Optional[date] = Query(None),
     data_fim: Optional[date] = Query(None),
     transportadora_id: Optional[int] = Query(None),
+    filial_cnpj: Optional[str] = Query(None),
     _=Depends(verificar_acesso_empresa),
     uc: BenchmarkUseCase = Depends(_deps),
     empresa_repo=Depends(get_empresa_repo),
@@ -96,7 +100,7 @@ def benchmark_nacional(
     empresa = empresa_repo.get(empresa_id)
     if not empresa:
         raise HTTPException(404, "Empresa não encontrada.")
-    resultado = uc.nacional(empresa_id, data_inicio, data_fim, transportadora_id)
+    resultado = uc.nacional(empresa_id, data_inicio, data_fim, transportadora_id, filial_cnpj)
     resultado.empresa_nome = empresa.nome_fantasia or empresa.razao_social
     return resultado
 
@@ -107,10 +111,11 @@ def benchmark_regional(
     data_inicio: Optional[date] = Query(None),
     data_fim: Optional[date] = Query(None),
     transportadora_id: Optional[int] = Query(None),
+    filial_cnpj: Optional[str] = Query(None),
     _=Depends(verificar_acesso_empresa),
     uc: BenchmarkUseCase = Depends(_deps),
 ):
-    return uc.regional(empresa_id, data_inicio, data_fim, transportadora_id)
+    return uc.regional(empresa_id, data_inicio, data_fim, transportadora_id, filial_cnpj)
 
 
 @router.get(
@@ -184,15 +189,17 @@ def benchmark_corredores(
 @router.get("/comparativo-mercado/{empresa_id}")
 def comparativo_mercado(
     empresa_id: int,
-    escopo: str = Query("NACIONAL", pattern="^(NACIONAL|REGIAO|CORREDOR)$"),
+    escopo: str = Query("NACIONAL", pattern="^(NACIONAL|REGIAO|CORREDOR|TRANSPORTADORA|CLIENTE)$"),
     data_inicio: Optional[date] = Query(None),
     data_fim: Optional[date] = Query(None),
+    busca: Optional[str] = Query(None, description="Filtra por nome do cliente (só escopo CLIENTE)"),
+    limite: int = Query(50, ge=1, le=200),
     _=Depends(verificar_acesso_empresa),
     uc: BenchmarkDashboardUseCase = Depends(_deps_dashboard),
 ):
     """Comparativo Cliente × Mercado (P10-P90) — Inteligência de Mercado
     (Matriz Benchmark OD) é a única fonte de referência lida aqui."""
-    return uc.comparativo_mercado(empresa_id, escopo, data_inicio, data_fim)
+    return uc.comparativo_mercado(empresa_id, escopo, data_inicio, data_fim, busca, limite)
 
 
 @router.get("/simulador-economia/{empresa_id}")
@@ -224,3 +231,28 @@ def indicadores_mercado(
         "confiabilidade": uc.confiabilidade(empresa_id, data_inicio, data_fim),
         "cobertura": uc.cobertura(empresa_id, data_inicio, data_fim),
     }
+
+
+@router.get("/simulador-hub/{empresa_id}", response_model=SimulacaoHubResultadoOut)
+def simulador_hub(
+    empresa_id: int,
+    hub_atual: str = Query(..., description="Código do hub de origem hoje (catálogo da empresa)."),
+    hub_alt: str = Query(..., description="Código do hub de origem alternativo a simular."),
+    data_inicio: Optional[date] = Query(None),
+    data_fim: Optional[date] = Query(None),
+    _=Depends(verificar_acesso_empresa),
+    uc: SimuladorHubUseCase = Depends(get_simulador_hub_uc),
+):
+    """Simulador de Hub de Origem: compara o custo/prazo REAL das rotas que a
+    empresa opera hoje a partir de `hub_atual` contra a referência de
+    mercado do MESMO destino partindo de `hub_alt` (BenchmarkCorredor).
+
+    Rotas sem referência cadastrada para o hub alternativo saem do cálculo
+    do delta total e vêm com `tem_referencia_alt=false` (CTA de cadastro).
+    Não é uma recomendação de troca de hub — não considera custo de
+    implantação (armazém, contrato mínimo, mobilização).
+    """
+    try:
+        return uc.simular(empresa_id, hub_atual, hub_alt, data_inicio, data_fim)
+    except ValueError as e:
+        raise HTTPException(422, str(e))

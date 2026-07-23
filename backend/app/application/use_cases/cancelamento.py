@@ -69,13 +69,18 @@ class CancelamentoCteUseCase:
                 empresa_id, evento.chave, evento.numero_evento
             )
             if ja_cancelado or evento_repetido:
+                # Não persiste: a constraint uq_cte_cancelamento_evento
+                # (empresa_id, chave, numero_evento) já garante uma única linha
+                # de log por evento — a primeira importação (CANCELADO) já
+                # cobre a auditoria. Inserir uma 2ª linha aqui violaria a
+                # constraint e derrubaria o lote inteiro com IntegrityError.
                 self._registrar(
                     resultado, empresa_id, nome, chave=evento.chave,
                     numero_evento=evento.numero_evento, cte_id=cte.id,
                     resultado_tipo="DUPLICADO",
                     mensagem="CT-e já cancelado ou evento já importado.",
                     tipo_evento=evento.tipo_evento, protocolo=evento.protocolo,
-                    data_cancelamento=evento.data_evento,
+                    data_cancelamento=evento.data_evento, persistir=False,
                 )
                 continue
 
@@ -106,7 +111,7 @@ class CancelamentoCteUseCase:
         self, resultado: ResultadoCancelamento, empresa_id: int, arquivo: str, *,
         chave: str, numero_evento: str, resultado_tipo: str, mensagem: str,
         cte_id=None, tipo_evento: str = "", protocolo: str = "",
-        data_cancelamento=None, xml: bytes | None = None,
+        data_cancelamento=None, xml: bytes | None = None, persistir: bool = True,
     ) -> None:
         if resultado_tipo == "CANCELADO":
             resultado.cancelados += 1
@@ -121,6 +126,9 @@ class CancelamentoCteUseCase:
             arquivo=arquivo, chave=chave,
             resultado=resultado_tipo, mensagem=mensagem,
         ))
+
+        if not persistir:
+            return
 
         xml_txt = None
         if xml is not None and len(xml) <= _MAX_XML_ARMAZENADO:

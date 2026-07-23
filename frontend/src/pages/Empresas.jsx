@@ -598,7 +598,7 @@ export default function Empresas() {
       />
 
       <ConfirmDialog
-        open={Boolean(confirmar)}
+        aberto={Boolean(confirmar)}
         titulo="Confirmar exclusão"
         mensagem={`Deseja remover "${confirmar?.nome}"?`}
         onConfirmar={() => {

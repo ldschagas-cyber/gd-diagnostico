@@ -11,6 +11,7 @@ import { extrairErro } from "../api/client";
 import { useFeedback } from "./Feedback";
 import { useAuth } from "../contexts/AuthContext";
 import { useEmpresa } from "../contexts/EmpresaContext";
+import { ehAdmin } from "../utils/permissoes";
 import { GD } from "../theme";
 
 /**
@@ -32,10 +33,10 @@ export default function GerenciarDadosImportados() {
   const [confirmacao, setConfirmacao] = useState("");
   const [excluindo, setExcluindo] = useState(false);
 
-  const ehAdmin = !!usuario?.is_superuser;
+  const podeGerenciar = ehAdmin(usuario);
 
   const carregar = useCallback(async () => {
-    if (!empresaAtivaId || !ehAdmin) return;
+    if (!empresaAtivaId || !podeGerenciar) return;
     setCarregando(true);
     try {
       const c = await importacaoApi.contarDados(empresaAtivaId);
@@ -45,11 +46,11 @@ export default function GerenciarDadosImportados() {
     } finally {
       setCarregando(false);
     }
-  }, [empresaAtivaId, ehAdmin, erroToast]);
+  }, [empresaAtivaId, podeGerenciar, erroToast]);
 
   useEffect(() => { carregar(); }, [carregar]);
 
-  if (!ehAdmin || !empresaAtivaId) return null;
+  if (!podeGerenciar || !empresaAtivaId) return null;
 
   const abrirDialogo = (origem, esperado, rotulo) => {
     setConfirmacao("");

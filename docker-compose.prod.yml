@@ -1,5 +1,5 @@
 # ============================================================
-# GD Frete Diagnóstico — Ambiente de PRODUÇÃO
+# GD Diagnóstico Logístico — Ambiente de PRODUÇÃO
 # ============================================================
 # Uso:
 #   cp backend/.env.example backend/.env   # ajuste SECRET_KEY, senhas

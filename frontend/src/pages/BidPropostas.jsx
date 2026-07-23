@@ -198,7 +198,7 @@ export default function BidPropostas() {
                   <TableRow key={p.id}>
                     <TableCell>{btNome(p.bid_transportadora_id)}</TableCell>
                     <TableCell>{p.valor_grupo}</TableCell>
-                    <TableCell align="right">{fmtNumero(p.valor_rs_kg, 4)}</TableCell>
+                    <TableCell align="right">{fmtNumero(p.valor_rs_kg, 2)}</TableCell>
                     <TableCell align="right">{fmtMoeda(p.valor_minimo)}</TableCell>
                     <TableCell align="right">{p.prazo_dias}d</TableCell>
                     <TableCell align="right">{p.cobertura_pct}%</TableCell>

@@ -72,7 +72,21 @@ def test_login_invalido(client):
 
 
 def test_seed_metas_regionais(client, auth_headers):
-    resp = client.get("/api/v1/metas/regionais", headers=auth_headers)
+    # Metas são por-empresa (v6.13): toda empresa nova já nasce com as
+    # 5 metas regionais zeradas (ver seed_metas_padroes).
+    emp = client.post(
+        "/api/v1/empresas",
+        headers=auth_headers,
+        json={
+            "razao_social": "Empresa Seed Metas",
+            "nome_fantasia": "Seed Metas",
+            "cnpj_matriz": "11444777000161", "setor": "Outros",
+        },
+    )
+    assert emp.status_code == 201
+    eid = emp.json()["id"]
+
+    resp = client.get(f"/api/v1/empresas/{eid}/metas/regionais", headers=auth_headers)
     assert resp.status_code == 200
     assert len(resp.json()) == 5  # 5 macro-regiões
 
@@ -112,11 +126,11 @@ def test_fluxo_completo_importacao_e_relatorios(client, auth_headers):
     assert round(d["nacional"]["frete_pct"], 2) == 3.0
     assert len(d["transportadoras"]) == 1
 
-    # relatórios
-    xlsx = client.get(f"/api/v1/relatorios/diagnostico/{eid}/excel", headers=auth_headers)
-    assert xlsx.status_code == 200 and len(xlsx.content) > 0
-    pdf = client.get(f"/api/v1/relatorios/diagnostico/{eid}/pdf", headers=auth_headers)
-    assert pdf.status_code == 200 and len(pdf.content) > 0
+    # relatórios de Diagnóstico — HTML e Excel
+    html = client.get(f"/api/v1/relatorios/diagnostico/{eid}/html", headers=auth_headers)
+    assert html.status_code == 200 and len(html.content) > 0
+    excel = client.get(f"/api/v1/relatorios/diagnostico/{eid}/excel", headers=auth_headers)
+    assert excel.status_code == 200 and len(excel.content) > 0
 
 
 def test_cte_sem_vinculo_e_ignorado(client, auth_headers):
@@ -219,8 +233,8 @@ def test_benchmark_analise_classificacao(client, auth_headers):
     assert tr[0]["nivel_custo"] == "Melhor custo"
 
 
-def test_relatorios_benchmark_pdf_e_excel(client, auth_headers):
-    """Fase E/F: relatórios consolidados de benchmark em PDF e Excel."""
+def test_relatorios_benchmark_pdf_e_html(client, auth_headers):
+    """Fase E/F: relatórios consolidados de benchmark em PDF e HTML (Excel descontinuado)."""
     emp = client.post(
         "/api/v1/empresas", headers=auth_headers,
         json={"razao_social": "Rep Co", "nome_fantasia": "Rep", "cnpj_matriz": "44.444.444/0001-91", "setor": "Indústria"},
@@ -237,9 +251,13 @@ def test_relatorios_benchmark_pdf_e_excel(client, auth_headers):
     assert pdf.status_code == 200
     assert pdf.content[:5] == b"%PDF-"
 
-    xls = client.get(f"/api/v1/relatorios/benchmark/{eid}/excel", headers=auth_headers)
-    assert xls.status_code == 200
-    assert xls.content[:2] == b"PK"
+    html = client.get(f"/api/v1/relatorios/benchmark/{eid}/html", headers=auth_headers)
+    assert html.status_code == 200
+    assert html.content[:15] == b"<!DOCTYPE html>"
+
+    excel = client.get(f"/api/v1/relatorios/benchmark/{eid}/excel", headers=auth_headers)
+    assert excel.status_code == 200
+    assert len(excel.content) > 500
 
 
 # ── MELHORIA 2 — Setor obrigatório no cadastro de empresa ───────────────────

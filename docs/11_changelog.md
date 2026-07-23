@@ -192,6 +192,26 @@ Rotas antigas (`/configuracoes/benchmark-pct`, `/configuracoes/corredores`) mant
 
 **Sem migration**: nenhuma tabela nova ou alterada em toda esta leva.
 
+## [6.10.1] — Simplifica a UX inicial da tela de Importação
+
+Na tela de Importação (`Importacao.jsx`), os botões "Importar CT-e"/"Importar Excel" e o container de upload ficavam sempre visíveis, mesmo quando o usuário só queria consultar "Base de CT-e por competência", "CT-e importados" ou "Gerenciar dados importados". Estado inicial agora mostra só essas três seções e um único botão "Importar" (topo direito, via `PageHeader.acoes`). Clique em "Importar" abre um modal centralizado (`Dialog` do MUI, `maxWidth="lg"`, até 90vh de altura) com o par de botões "Importar CT-e"/"Importar Excel" (nenhum pré-selecionado); clique em um deles exibe o container de upload correspondente dentro do próprio modal, sem precisar de rolagem em nenhum dos dois modos. Fechar pelo X, clique fora ou Esc reseta o modo selecionado — a próxima abertura sempre começa sem nenhum modo escolhido.
+
+**Puramente de apresentação**: nenhuma mudança em endpoint, regra de negócio ou schema. Verificado que não havia teste automatizado de frontend nem rota/deep-link dependendo da visibilidade prévia desses elementos (`/importar/excel` já redirecionava para `/importar/cte`; o modo de importação nunca foi controlado pela URL).
+
+## [6.11.0] — Reconhece Carta de Correção (CCe) na importação de CT-e
+
+Lotes reais de eventos de CT-e exportados pelo emissor (nome de arquivo sempre prefixado `CCe_`, independente do tipo real) misturam Cartas de Correção (CCe, `tpEvento 110110`) com cancelamentos de verdade (`tpEvento 110111`) — o nome do arquivo não indica o tipo, só o conteúdo. Antes desta versão, qualquer CCe caía como "ERRO" genérico no fluxo de cancelamento (`tpEvento=110110 não é cancelamento`), sem nenhuma indicação do que a CCe pedia para corrigir.
+
+**Reconhecimento sem aplicação automática (RN-08a)**: `_classificar_xml` (`importacao.py`) passa a distinguir três tipos de XML no lote — CT-e, evento de cancelamento e CCe — pela tag `<tpEvento>`. CCe é roteada para o novo `CartaCorrecaoCteUseCase`/`parse_carta_correcao_xml`, que localiza o CT-e pela chave e **registra a correção proposta no log de auditoria sem alterar nenhum campo do CT-e**. Motivo: a CCe é disciplinada pelo Art. 58-B do Convênio SINIEF 06/89 e não deveria, por regra, corrigir variáveis que determinam o valor da prestação (ex.: quantidade/peso de carga — `infQ.qCarga`, que alimenta `peso` e portanto R$/kg em todo o motor analítico); na prática, porém, é usada para isso, então o valor corrigido fica para revisão manual do analista, não é confiado cegamente.
+
+**Reaproveita a tabela `cte_cancelamentos`** (sem migration): `resultado` ganha os valores `CCE_REGISTRADA` / `CCE_DUPLICADO` / `CCE_NAO_ENCONTRADO` / `CCE_ERRO`, distintos dos de cancelamento na mesma auditoria. Resposta de `POST /importacao/cte/{empresa_id}` ganha a chave `carta_correcao` (contagens + ocorrências), ao lado de `importacao` e `cancelamento` já existentes. Frontend (`ResultadoImportacao.jsx`) ganha um card "Cartas de Correção" e um alerta listando cada correção proposta (campo, item, valor) com aviso explícito de que não foi aplicada automaticamente.
+
+**Correção de bug pré-existente descoberta durante o teste**: reimportar um evento de cancelamento já processado derrubava o lote inteiro com `IntegrityError` (a constraint `uq_cte_cancelamento_evento` bloqueia uma 2ª linha de log para a mesma `empresa_id+chave+numero_evento`, mas o código tentava inserir uma linha `DUPLICADO` mesmo assim). `CancelamentoCteUseCase._registrar` e o novo `CartaCorrecaoCteUseCase._registrar` ganham um parâmetro `persistir`, que pula a escrita no log quando o evento já foi registrado antes — a primeira linha já cobre a auditoria.
+
+**Validado com lote real de 12 eventos** (7 cancelamentos + 5 CCe, todos prefixados `CCe_` no nome do arquivo) via `TestClient` contra o banco de desenvolvimento: classificação, extração de correção (single e multi-campo), não-mutação do CT-e, e reimportação idempotente sem erro — todos corretos.
+
+**Sem migration**: nenhuma tabela nova; `cte_cancelamentos` reaproveitada com novos valores de `resultado`.
+
 ---
 
 ## Nota sobre nomenclatura de versão

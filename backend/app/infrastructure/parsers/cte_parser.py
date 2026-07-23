@@ -27,6 +27,11 @@ class CTeParseResult:
         self.destinatario_nome: str = ""
         self.transportadora_cnpj: str = ""
         self.transportadora_nome: str = ""
+        self.transportadora_endereco: str = ""
+        self.transportadora_cidade: str = ""
+        self.transportadora_uf: str = ""
+        self.transportadora_cep: str = ""
+        self.transportadora_telefone: str = ""
         self.peso: float = 0.0
         self.valor_frete: float = 0.0
         self.valor_mercadoria: float = 0.0
@@ -103,6 +108,23 @@ def parse_cte_xml(xml_bytes: bytes) -> CTeParseResult:
     if emit is not None:
         result.transportadora_cnpj = _so_digitos(_text(emit, "cte:CNPJ"))
         result.transportadora_nome = _text(emit, "cte:xNome") or _text(emit, "cte:xFant")
+
+        # Endereço completo do emitente (enderEmit) — usado para já cadastrar
+        # a transportadora completa na primeira importação (v6.11).
+        ender = _find(emit, "cte:enderEmit")
+        if ender is not None:
+            logradouro = _text(ender, "cte:xLgr")
+            numero = _text(ender, "cte:nro")
+            bairro = _text(ender, "cte:xBairro")
+            partes = [p for p in (logradouro, numero) if p]
+            endereco = " ".join(partes)
+            if bairro:
+                endereco = f"{endereco} - {bairro}" if endereco else bairro
+            result.transportadora_endereco = endereco
+            result.transportadora_cidade = _text(ender, "cte:xMun")
+            result.transportadora_uf = _text(ender, "cte:UF")
+            result.transportadora_cep = _so_digitos(_text(ender, "cte:CEP"))
+            result.transportadora_telefone = _text(ender, "cte:fone")
 
     # Tomador do serviço (RF008): pode estar em toma3/toma4
     result.tomador_cnpj = _extrair_tomador(inf)

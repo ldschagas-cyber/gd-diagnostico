@@ -34,6 +34,7 @@ class DlgAnaliticoOut(BaseModel):
     ranking_componentes: Optional[List[Tuple[str, float]]] = None
     sinal_fragmentacao: Optional[bool] = None
     causa_dominante: Optional[str] = None  # ADICIONAIS | FRAGMENTACAO | AMBAS | NENHUMA — só ATENCAO/CRITICO
+    acao_recomendada: Optional[str] = None  # correção prescritiva para a causa (não só descritiva)
 
     class Config:
         from_attributes = True
@@ -48,6 +49,9 @@ class DlgOutlierOut(BaseModel):
     valor_real: float
     valor_limite: float
     desvio_pct: float
+    transportadora: str
+    valor_mercadoria: float
+    peso: float
 
     class Config:
         from_attributes = True

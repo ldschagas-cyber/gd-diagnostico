@@ -1,5 +1,5 @@
 # ============================================================
-# GD Frete Diagnóstico — Frontend (React + Vite → nginx)
+# GD Diagnóstico Logístico — Frontend (React + Vite → nginx)
 # ============================================================
 
 # --- Etapa 1: build ---

@@ -125,12 +125,14 @@ class BenchmarkUseCase:
         self._mapa_v2_cache: Optional[dict] = None
 
     # ------------------------------------------------------------------
-    def _ctes(self, empresa_id, data_inicio, data_fim, transportadora_id):
+    def _ctes(self, empresa_id, data_inicio, data_fim, transportadora_id, filial_cnpj=None):
         ctes = self.cte_repo.list_by_empresa(
             empresa_id, data_inicio, data_fim, apenas_ativos=True
         )
         if transportadora_id:
             ctes = [c for c in ctes if c.transportadora_id == transportadora_id]
+        if filial_cnpj:
+            ctes = [c for c in ctes if c.tomador_cnpj == filial_cnpj]
         return ctes
 
     def _mapa_v2(self) -> dict:
@@ -163,9 +165,10 @@ class BenchmarkUseCase:
         data_inicio: Optional[date] = None,
         data_fim: Optional[date] = None,
         transportadora_id: Optional[int] = None,
+        filial_cnpj: Optional[str] = None,
     ) -> BenchmarkNacional:
-        ctes = self._ctes(empresa_id, data_inicio, data_fim, transportadora_id)
-        ind = self.diagnostico._indicador_nacional(ctes)
+        ctes = self._ctes(empresa_id, data_inicio, data_fim, transportadora_id, filial_cnpj)
+        ind = self.diagnostico._indicador_nacional(ctes, empresa_id)
 
         # v6.9 — a Matriz Benchmark (OD) é a única fonte de referência de
         # R$/kg (Fase 1, Single Source of Truth). O antigo override pela
@@ -198,9 +201,10 @@ class BenchmarkUseCase:
         data_inicio: Optional[date] = None,
         data_fim: Optional[date] = None,
         transportadora_id: Optional[int] = None,
+        filial_cnpj: Optional[str] = None,
     ) -> List[BenchmarkRegionalItem]:
-        ctes = self._ctes(empresa_id, data_inicio, data_fim, transportadora_id)
-        indicadores = self.diagnostico._indicadores_regionais(ctes)
+        ctes = self._ctes(empresa_id, data_inicio, data_fim, transportadora_id, filial_cnpj)
+        indicadores = self.diagnostico._indicadores_regionais(ctes, empresa_id)
         itens: List[BenchmarkRegionalItem] = []
         for ind in indicadores:
             # cada região comparada contra a Matriz Benchmark (OD) da própria região
@@ -256,7 +260,7 @@ class BenchmarkUseCase:
         data_fim: Optional[date] = None,
     ) -> PotencialEconomia:
         ctes = self._ctes(empresa_id, data_inicio, data_fim, None)
-        regionais = self.diagnostico._indicadores_regionais(ctes)
+        regionais = self.diagnostico._indicadores_regionais(ctes, empresa_id)
 
         por_regiao: List[EconomiaRegiaoItem] = []
         economia_total = 0.0

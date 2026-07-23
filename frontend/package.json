@@ -1,9 +1,9 @@
 {
-  "name": "gd-frete-diagnostico-frontend",
+  "name": "gd-diagnostico-logistico-frontend",
   "private": true,
   "version": "6.5.0",
   "type": "module",
-  "description": "Interface web do GD Frete Diagnóstico — diagnóstico de custos logísticos.",
+  "description": "Interface web do GD Diagnóstico Logístico — diagnóstico de custos logísticos.",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
@@ -16,7 +16,6 @@
     "@mui/material": "^6.2.0",
     "@mui/x-data-grid": "^7.23.1",
     "@tanstack/react-query": "^5.62.7",
-    "@tanstack/react-query-devtools": "^5.62.7",
     "axios": "^1.7.9",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",

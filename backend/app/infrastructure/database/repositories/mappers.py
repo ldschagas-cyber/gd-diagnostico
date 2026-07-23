@@ -4,6 +4,7 @@ from app.domain.entities import (
     Benchmark,
     Cidade,
     Empresa,
+    FechamentoMensal,
     Filial,
     MacroRegiaoEnum,
     MetaNacional,
@@ -12,6 +13,7 @@ from app.domain.entities import (
     Regiao,
     SetorEnum,
     StatusEnum,
+    StatusFechamentoEnum,
     Transportadora,
     User,
 )
@@ -20,6 +22,7 @@ from app.infrastructure.database.models import (
     CidadeModel,
     CTeModel,
     EmpresaModel,
+    FechamentoMensalModel,
     FilialModel,
     MetaNacionalModel,
     MetaRegionalModel,
@@ -37,6 +40,7 @@ def user_to_domain(m: UserModel) -> User:
         is_active=m.is_active, is_superuser=m.is_superuser,
         role=RoleEnum(m.role) if m.role else (RoleEnum.ADMIN if m.is_superuser else RoleEnum.ANALISTA),
         empresa_id=m.empresa_id,
+        empresas_ids=[e.id for e in (m.empresas or [])],
         created_at=m.created_at,
     )
 
@@ -78,14 +82,27 @@ def cidade_to_domain(m: CidadeModel) -> Cidade:
 
 
 def meta_nacional_to_domain(m: MetaNacionalModel) -> MetaNacional:
-    return MetaNacional(id=m.id, meta_rs_kg=m.meta_rs_kg, meta_pct_frete=m.meta_pct_frete)
+    return MetaNacional(
+        id=m.id, empresa_id=m.empresa_id,
+        meta_rs_kg=m.meta_rs_kg, meta_pct_frete=m.meta_pct_frete,
+    )
 
 
 def meta_regional_to_domain(m: MetaRegionalModel) -> MetaRegional:
     return MetaRegional(
-        id=m.id, macro_regiao=MacroRegiaoEnum(m.macro_regiao),
+        id=m.id, empresa_id=m.empresa_id, macro_regiao=MacroRegiaoEnum(m.macro_regiao),
         meta_rs_kg=m.meta_rs_kg, meta_pct_frete=m.meta_pct_frete,
-        prazo_medio_meta=m.prazo_medio_meta,
+        prazo_medio_meta=m.prazo_medio_meta, orcamento_mensal=m.orcamento_mensal,
+    )
+
+
+def fechamento_mensal_to_domain(m: FechamentoMensalModel) -> FechamentoMensal:
+    return FechamentoMensal(
+        id=m.id, empresa_id=m.empresa_id, competencia=m.competencia,
+        fat_norte=m.fat_norte, fat_nordeste=m.fat_nordeste, fat_centro_oeste=m.fat_centro_oeste,
+        fat_sudeste=m.fat_sudeste, fat_sul=m.fat_sul,
+        devolucao=m.devolucao, frete_complementar=m.frete_complementar,
+        status=StatusFechamentoEnum(m.status), fechado_em=m.fechado_em,
     )
 
 
@@ -116,7 +133,7 @@ def nfe_to_domain(m: NFeModel) -> NFe:
 def hub_to_domain(m):
     from app.domain.entities import HubLogistico
     return HubLogistico(
-        id=m.id, codigo=m.codigo, nome=m.nome,
+        id=m.id, empresa_id=m.empresa_id, codigo=m.codigo, nome=m.nome,
         descricao=m.descricao, ativo=m.ativo,
     )
 
@@ -135,11 +152,13 @@ def benchmark_corredor_to_domain(m):
     from app.domain.entities import BenchmarkCorredor
     return BenchmarkCorredor(
         id=m.id,
+        empresa_id=m.empresa_id,
         hub_origem_codigo=m.hub_origem_codigo,
         hub_destino_codigo=m.hub_destino_codigo,
         frete_kg_min=m.frete_kg_min, frete_kg_medio=m.frete_kg_medio, frete_kg_max=m.frete_kg_max,
         frete_pct_min=m.frete_pct_min, frete_pct_medio=m.frete_pct_medio, frete_pct_max=m.frete_pct_max,
         volume_referencia=m.volume_referencia, dispersao_kg=m.dispersao_kg,
+        prazo_dias_medio=m.prazo_dias_medio,
         observacoes=m.observacoes,
     )
 

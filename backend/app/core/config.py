@@ -15,9 +15,9 @@ class Settings(BaseSettings):
     ENVIRONMENT: str = "development"          # development | production
 
     # Aplicação
-    PROJECT_NAME: str = "GD Frete Diagnóstico"
+    PROJECT_NAME: str = "GD Diagnóstico Logístico"
     API_V1_PREFIX: str = "/api/v1"
-    VERSION: str = "6.6.0"
+    VERSION: str = "6.16.0"
     DEBUG: bool = True
 
     # Banco de dados — SQLite (dev local) ou PostgreSQL (Docker/produção)

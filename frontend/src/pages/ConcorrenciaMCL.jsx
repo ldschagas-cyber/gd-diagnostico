@@ -10,6 +10,7 @@ import TuneIcon from "@mui/icons-material/Tune";
 import BlockIcon from "@mui/icons-material/Block";
 import PageHeader from "../components/PageHeader";
 import { VazioEstado } from "../components/Tabela";
+import InteligenciaRecomendacao from "../components/InteligenciaRecomendacao";
 import { useEmpresa } from "../contexts/EmpresaContext";
 import { useFeedback } from "../components/Feedback";
 import { useBidLista, useMclPrevia, useMutacoesMcl } from "../api/queries";
@@ -161,7 +162,7 @@ export default function ConcorrenciaMCL() {
                     </Box>
                     <Box>
                       <Typography variant="caption" color="text.secondary">R$/kg</Typography>
-                      <Typography variant="h6" sx={{ fontWeight: 700 }}>R$ {fmtNumero(venc.rs_kg, 4)}</Typography>
+                      <Typography variant="h6" sx={{ fontWeight: 700 }}>R$ {fmtNumero(venc.rs_kg, 2)}</Typography>
                     </Box>
                     <Box>
                       <Typography variant="caption" color="text.secondary">vs 2ª</Typography>
@@ -220,7 +221,7 @@ export default function ConcorrenciaMCL() {
                         {i === 0 && <EmojiEventsIcon sx={{ fontSize: 16, color: GD.amber, verticalAlign: "middle", mr: 0.5 }} />}
                         {r.nome}
                       </TableCell>
-                      <TableCell align="right">R$ {fmtNumero(r.rs_kg, 4)}</TableCell>
+                      <TableCell align="right">R$ {fmtNumero(r.rs_kg, 2)}</TableCell>
                       <TableCell align="center">
                         <Chip size="small" label={r.dlg_classificacao === "SEM_REF" ? "—" : r.dlg_classificacao}
                           sx={{ bgcolor: (COR_CLF[r.dlg_classificacao] || GD.slate) + "22", color: COR_CLF[r.dlg_classificacao] || GD.slate, fontWeight: 600 }} />
@@ -245,7 +246,7 @@ export default function ConcorrenciaMCL() {
                   <Stack spacing={0.5}>
                     {rejeitadas.map((r) => (
                       <Typography key={r.bid_transportadora_id} variant="body2" color="text.secondary">
-                        <strong>{r.nome}</strong> (R$ {fmtNumero(r.rs_kg, 4)}/kg) — {r.motivo_rejeicao}
+                        <strong>{r.nome}</strong> (R$ {fmtNumero(r.rs_kg, 2)}/kg) — {r.motivo_rejeicao}
                       </Typography>
                     ))}
                   </Stack>
@@ -314,6 +315,8 @@ export default function ConcorrenciaMCL() {
       {decisao && !venc && !carregando && (
         <VazioEstado mensagem="Nenhuma proposta elegível" descricao="Cadastre propostas no BID (ou verifique as restrições do benchmark) para gerar o ranking." />
       )}
+
+      <InteligenciaRecomendacao modulo="concorrencia" />
     </Box>
   );
 }

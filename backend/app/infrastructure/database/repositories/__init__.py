@@ -1,10 +1,10 @@
 """Implementações concretas dos repositórios usando SQLAlchemy (adapters)."""
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 from typing import List, Optional
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from app.domain.entities import (
@@ -14,10 +14,12 @@ from app.domain.entities import (
     CTE_STATUS_CANCELADO,
     Cidade,
     Empresa,
+    FechamentoMensal,
     Filial,
     MetaNacional,
     MetaRegional,
     Regiao,
+    StatusFechamentoEnum,
     Transportadora,
     User,
 )
@@ -26,6 +28,7 @@ from app.domain.repositories import (
     ICidadeRepository,
     ICTeRepository,
     IEmpresaRepository,
+    IFechamentoMensalRepository,
     IFilialRepository,
     IMetaNacionalRepository,
     IMetaRegionalRepository,
@@ -35,16 +38,22 @@ from app.domain.repositories import (
 )
 from app.infrastructure.database.models import (
     BenchmarkModel,
+    BidAuditoriaModel,
+    BidModel,
+    ChatSessaoModel,
     CidadeModel,
     CTeModel,
     CteCancelamentoModel,
+    DlgOutlierModel,
     EmpresaModel,
+    FechamentoMensalModel,
     FilialModel,
     MetaNacionalModel,
     MetaRegionalModel,
     NFeModel,
     RegiaoModel,
     TransportadoraModel,
+    UsageLogModel,
     UserModel,
 )
 from app.infrastructure.database.repositories import mappers as mp
@@ -73,6 +82,10 @@ class UserRepository(IUserRepository):
             role=(e.role.value if hasattr(e.role, "value") else (e.role or "ANALISTA")),
             empresa_id=e.empresa_id,
         )
+        if e.empresas_ids:
+            m.empresas = self.db.scalars(
+                select(EmpresaModel).where(EmpresaModel.id.in_(e.empresas_ids))
+            ).all()
         self.db.add(m); self.db.commit(); self.db.refresh(m)
         return mp.user_to_domain(m)
 
@@ -83,6 +96,10 @@ class UserRepository(IUserRepository):
         m.nome = e.nome; m.email = e.email; m.is_active = e.is_active
         m.is_superuser = e.is_superuser
         m.empresa_id = e.empresa_id
+        if e.empresas_ids:
+            m.empresas = self.db.scalars(
+                select(EmpresaModel).where(EmpresaModel.id.in_(e.empresas_ids))
+            ).all()
         if getattr(e, "role", None):
             m.role = e.role.value if hasattr(e.role, "value") else e.role
         if e.hashed_password:
@@ -94,7 +111,28 @@ class UserRepository(IUserRepository):
         m = self.db.get(UserModel, id)
         if not m:
             return False
-        self.db.delete(m); self.db.commit()
+
+        # Exclusão física em cascata (decisão explícita: apagar também os
+        # BIDs criados pelo usuário, não só desvincular). BidModel já
+        # cascateia escopos/transportadoras/propostas/simulações/auditoria
+        # via relationship — deletar via ORM (não bulk) para acionar isso.
+        bids = self.db.scalars(select(BidModel).where(BidModel.created_by == id)).all()
+        for bid in bids:
+            self.db.delete(bid)
+
+        # Auditorias do usuário em BIDs de terceiros (os dos próprios BIDs
+        # dele já saem no cascade acima).
+        self.db.execute(delete(BidAuditoriaModel).where(BidAuditoriaModel.user_id == id))
+
+        # Sessões de chat do usuário (cascateia para chat_mensagens).
+        sessoes = self.db.scalars(select(ChatSessaoModel).where(ChatSessaoModel.user_id == id)).all()
+        for sessao in sessoes:
+            self.db.delete(sessao)
+
+        self.db.execute(delete(UsageLogModel).where(UsageLogModel.user_id == id))
+
+        self.db.delete(m)
+        self.db.commit()
         return True
 
 
@@ -350,14 +388,18 @@ class MetaNacionalRepository(IMetaNacionalRepository):
     def __init__(self, db: Session):
         self.db = db
 
-    def get(self) -> Optional[MetaNacional]:
-        m = self.db.scalar(select(MetaNacionalModel).limit(1))
+    def get(self, empresa_id: int) -> Optional[MetaNacional]:
+        m = self.db.scalar(
+            select(MetaNacionalModel).where(MetaNacionalModel.empresa_id == empresa_id)
+        )
         return mp.meta_nacional_to_domain(m) if m else None
 
     def upsert(self, meta: MetaNacional) -> MetaNacional:
-        m = self.db.scalar(select(MetaNacionalModel).limit(1))
+        m = self.db.scalar(
+            select(MetaNacionalModel).where(MetaNacionalModel.empresa_id == meta.empresa_id)
+        )
         if not m:
-            m = MetaNacionalModel()
+            m = MetaNacionalModel(empresa_id=meta.empresa_id)
             self.db.add(m)
         m.meta_rs_kg = meta.meta_rs_kg
         m.meta_pct_frete = meta.meta_pct_frete
@@ -369,24 +411,99 @@ class MetaRegionalRepository(IMetaRegionalRepository):
     def __init__(self, db: Session):
         self.db = db
 
-    def list(self) -> List[MetaRegional]:
-        rows = self.db.scalars(select(MetaRegionalModel)).all()
+    def list(self, empresa_id: int) -> List[MetaRegional]:
+        rows = self.db.scalars(
+            select(MetaRegionalModel).where(MetaRegionalModel.empresa_id == empresa_id)
+        ).all()
         return [mp.meta_regional_to_domain(m) for m in rows]
 
     def upsert(self, meta: MetaRegional) -> MetaRegional:
         m = self.db.scalar(
             select(MetaRegionalModel).where(
-                MetaRegionalModel.macro_regiao == meta.macro_regiao.value
+                MetaRegionalModel.empresa_id == meta.empresa_id,
+                MetaRegionalModel.macro_regiao == meta.macro_regiao.value,
             )
         )
         if not m:
-            m = MetaRegionalModel(macro_regiao=meta.macro_regiao.value)
+            m = MetaRegionalModel(empresa_id=meta.empresa_id, macro_regiao=meta.macro_regiao.value)
             self.db.add(m)
         m.meta_rs_kg = meta.meta_rs_kg
         m.meta_pct_frete = meta.meta_pct_frete
         m.prazo_medio_meta = meta.prazo_medio_meta
+        m.orcamento_mensal = meta.orcamento_mensal
         self.db.commit(); self.db.refresh(m)
         return mp.meta_regional_to_domain(m)
+
+
+class FechamentoMensalRepository(IFechamentoMensalRepository):
+    def __init__(self, db: Session):
+        self.db = db
+
+    def get_by_competencia(self, empresa_id: int, competencia: str) -> Optional[FechamentoMensal]:
+        m = self.db.scalar(
+            select(FechamentoMensalModel).where(
+                FechamentoMensalModel.empresa_id == empresa_id,
+                FechamentoMensalModel.competencia == competencia,
+            )
+        )
+        return mp.fechamento_mensal_to_domain(m) if m else None
+
+    def list_historico(self, empresa_id: int, limite: int = 13) -> List[FechamentoMensal]:
+        rows = self.db.scalars(
+            select(FechamentoMensalModel)
+            .where(FechamentoMensalModel.empresa_id == empresa_id)
+            .order_by(FechamentoMensalModel.competencia.desc())
+            .limit(limite)
+        ).all()
+        return [mp.fechamento_mensal_to_domain(m) for m in rows]
+
+    def upsert(self, fechamento: FechamentoMensal) -> FechamentoMensal:
+        m = self.db.scalar(
+            select(FechamentoMensalModel).where(
+                FechamentoMensalModel.empresa_id == fechamento.empresa_id,
+                FechamentoMensalModel.competencia == fechamento.competencia,
+            )
+        )
+        if not m:
+            m = FechamentoMensalModel(empresa_id=fechamento.empresa_id, competencia=fechamento.competencia)
+            self.db.add(m)
+        m.fat_norte = fechamento.fat_norte
+        m.fat_nordeste = fechamento.fat_nordeste
+        m.fat_centro_oeste = fechamento.fat_centro_oeste
+        m.fat_sudeste = fechamento.fat_sudeste
+        m.fat_sul = fechamento.fat_sul
+        m.devolucao = fechamento.devolucao
+        m.frete_complementar = fechamento.frete_complementar
+        self.db.commit(); self.db.refresh(m)
+        return mp.fechamento_mensal_to_domain(m)
+
+    def fechar(self, empresa_id: int, competencia: str) -> Optional[FechamentoMensal]:
+        m = self.db.scalar(
+            select(FechamentoMensalModel).where(
+                FechamentoMensalModel.empresa_id == empresa_id,
+                FechamentoMensalModel.competencia == competencia,
+            )
+        )
+        if not m:
+            return None
+        m.status = StatusFechamentoEnum.FECHADO.value
+        m.fechado_em = datetime.utcnow()
+        self.db.commit(); self.db.refresh(m)
+        return mp.fechamento_mensal_to_domain(m)
+
+    def reabrir(self, empresa_id: int, competencia: str) -> Optional[FechamentoMensal]:
+        m = self.db.scalar(
+            select(FechamentoMensalModel).where(
+                FechamentoMensalModel.empresa_id == empresa_id,
+                FechamentoMensalModel.competencia == competencia,
+            )
+        )
+        if not m:
+            return None
+        m.status = StatusFechamentoEnum.ABERTO.value
+        m.fechado_em = None
+        self.db.commit(); self.db.refresh(m)
+        return mp.fechamento_mensal_to_domain(m)
 
 
 class CTeRepository(ICTeRepository):
@@ -400,6 +517,14 @@ class CTeRepository(ICTeRepository):
     def get_by_chave(self, chave: str) -> Optional[CTe]:
         m = self.db.scalar(select(CTeModel).where(CTeModel.chave == chave))
         return mp.cte_to_domain(m) if m else None
+
+    def get_chaves_existentes(self, chaves: List[str]) -> set:
+        if not chaves:
+            return set()
+        rows = self.db.scalars(
+            select(CTeModel.chave).where(CTeModel.chave.in_(chaves))
+        ).all()
+        return set(rows)
 
     def list(self, skip: int = 0, limit: int = 100) -> List[CTe]:
         rows = self.db.scalars(select(CTeModel).offset(skip).limit(limit)).all()
@@ -545,6 +670,30 @@ class CTeRepository(ICTeRepository):
             }
             for r in rows
         ]
+
+    def intervalo_datas(
+        self,
+        empresa_id: int,
+        data_inicio: "date | None" = None,
+        data_fim: "date | None" = None,
+        apenas_ativos: bool = True,
+    ) -> tuple:
+        """Retorna (MIN, MAX) de data_emissao dos CT-es agregados pelo mesmo
+        filtro. Usado para inferir quantos meses o período efetivamente
+        agregado cobre quando o filtro de data não foi informado."""
+        from sqlalchemy import func
+
+        stmt = select(
+            func.min(CTeModel.data_emissao), func.max(CTeModel.data_emissao)
+        ).where(CTeModel.empresa_id == empresa_id)
+        if apenas_ativos:
+            stmt = stmt.where(CTeModel.status == CTE_STATUS_ATIVO)
+        if data_inicio:
+            stmt = stmt.where(CTeModel.data_emissao >= data_inicio)
+        if data_fim:
+            stmt = stmt.where(CTeModel.data_emissao <= data_fim)
+        row = self.db.execute(stmt).one()
+        return row[0], row[1]
 
     def agregar_por_transportadora(
         self,
@@ -766,6 +915,9 @@ class CTeRepository(ICTeRepository):
         )
         m.data_saida = e.data_saida
         m.data_entrega = e.data_entrega
+        m.destinatario_cnpj = e.destinatario_cnpj
+        m.destinatario_nome = e.destinatario_nome
+        m.tomador_cnpj = e.tomador_cnpj
         # Só sobrescreve a composição quando a planilha trouxe componentes,
         # evitando apagar uma composição já existente numa reimportação sem eles.
         if e.composicao_frete:
@@ -900,6 +1052,19 @@ class CTeRepository(ICTeRepository):
             ).limit(1)
         ) is not None
 
+    def existe_cce_registrada(
+        self, empresa_id: int, chave: str, numero_evento: str
+    ) -> bool:
+        """True se a Carta de Correção (empresa+chave+nSeqEvento) já foi registrada."""
+        return self.db.scalar(
+            select(CteCancelamentoModel.id).where(
+                CteCancelamentoModel.empresa_id == empresa_id,
+                CteCancelamentoModel.chave == chave,
+                CteCancelamentoModel.numero_evento == numero_evento,
+                CteCancelamentoModel.resultado == "CCE_REGISTRADA",
+            ).limit(1)
+        ) is not None
+
     def commit(self) -> None:
         self.db.commit()
 
@@ -963,13 +1128,13 @@ class CTeRepository(ICTeRepository):
         return saida
 
     def frete_mensal_ativos(self, empresa_id: int, meses: int = 6) -> list[dict]:
-        """Soma o frete e a mercadoria (apenas CT-es ATIVOS) por competência (mês/ano).
+        """Soma o frete, a mercadoria e o peso (apenas CT-es ATIVOS) por competência (mês/ano).
 
-        Base das evoluções mensais do dashboard (Frete Total e % Frete/Mercadoria).
-        Retorna os últimos ``meses`` em ordem cronológica (mais antigo → mais
-        recente). Agregação no banco (GROUP BY ano/mês da emissão), compatível
-        com PostgreSQL (EXTRACT nativo) e SQLite (strftime), no mesmo padrão de
-        ``contar_por_competencia``. CT-es sem data de emissão são ignorados.
+        Base das evoluções mensais do dashboard (Frete Total, % Frete/Mercadoria e
+        Frete por Kg). Retorna os últimos ``meses`` em ordem cronológica (mais
+        antigo → mais recente). Agregação no banco (GROUP BY ano/mês da emissão),
+        compatível com PostgreSQL (EXTRACT nativo) e SQLite (strftime), no mesmo
+        padrão de ``contar_por_competencia``. CT-es sem data de emissão são ignorados.
         """
         from sqlalchemy import extract, func
 
@@ -980,6 +1145,7 @@ class CTeRepository(ICTeRepository):
                 ano.label("ano"), mes.label("mes"),
                 func.sum(CTeModel.valor_frete).label("frete"),
                 func.sum(CTeModel.valor_mercadoria).label("mercadoria"),
+                func.sum(CTeModel.peso).label("peso"),
             )
             .where(
                 CTeModel.empresa_id == empresa_id,
@@ -995,8 +1161,9 @@ class CTeRepository(ICTeRepository):
                 "competencia": f"{int(a):04d}-{int(m):02d}",
                 "frete_total": float(frete or 0.0),
                 "frete_pct": float(frete or 0.0) / float(mercadoria) * 100 if mercadoria else 0.0,
+                "frete_rs_kg": float(frete or 0.0) / float(peso) if peso else 0.0,
             }
-            for a, m, frete, mercadoria in rows
+            for a, m, frete, mercadoria, peso in rows
         ]
         saida.reverse()  # cronológico: mais antigo → mais recente
         return saida
@@ -1004,16 +1171,20 @@ class CTeRepository(ICTeRepository):
     def excluir_por_empresa(
         self, empresa_id: int, origem: Optional[str] = None
     ) -> int:
-        """Exclui CT-es importados da empresa (e seus NF-es filhos).
+        """Exclui CT-es importados da empresa (e todos os registros dependentes).
 
         - origem=None  -> exclui todos os CT-es da empresa.
         - origem="XML" -> exclui apenas os importados por XML.
         - origem="EXCEL" -> exclui apenas os importados por planilha.
 
-        Remove explicitamente os NF-es filhos antes (sem deixar órfãos).
+        Remove explicitamente os filhos antes (sem deixar órfãos nem violar as
+        FKs de ctes.id): NF-es e outliers DLG são apagados; o log de
+        cancelamentos é preservado, só desvinculado (cte_id -> NULL), pois é
+        um registro de auditoria válido mesmo sem o CT-e existir mais.
         Retorna a quantidade de CT-es excluídos.
         """
         from sqlalchemy import delete as sa_delete
+        from sqlalchemy import update as sa_update
 
         filtro = [CTeModel.empresa_id == empresa_id]
         if origem:
@@ -1025,10 +1196,94 @@ class CTeRepository(ICTeRepository):
         if not ids:
             return 0
 
+        self.db.execute(
+            sa_update(CteCancelamentoModel)
+            .where(CteCancelamentoModel.cte_id.in_(ids))
+            .values(cte_id=None)
+        )
+        self.db.execute(sa_delete(DlgOutlierModel).where(DlgOutlierModel.cte_id.in_(ids)))
         self.db.execute(sa_delete(NFeModel).where(NFeModel.cte_id.in_(ids)))
         self.db.execute(sa_delete(CTeModel).where(CTeModel.id.in_(ids)))
         self.db.commit()
         return len(ids)
+
+    # ── Grid de CT-e individuais (v6.11) ──────────────────────────────────────
+
+    def listar_paginado(
+        self, empresa_id: int, page: int = 1, page_size: int = 25,
+        status: Optional[str] = None, origem: Optional[str] = None,
+    ) -> tuple[list[dict], int]:
+        """Lista CT-es individuais da empresa, paginado, para a grid da tela de
+        importação. Traz o nome da transportadora via LEFT JOIN (evita N+1).
+        """
+        from sqlalchemy import func
+
+        filtro = [CTeModel.empresa_id == empresa_id]
+        if status:
+            filtro.append(CTeModel.status == status)
+        if origem:
+            filtro.append(CTeModel.origem_importacao == origem)
+
+        total = self.db.scalar(select(func.count(CTeModel.id)).where(*filtro)) or 0
+
+        stmt = (
+            select(CTeModel, TransportadoraModel.razao_social)
+            .outerjoin(
+                TransportadoraModel, CTeModel.transportadora_id == TransportadoraModel.id
+            )
+            .where(*filtro)
+            .order_by(CTeModel.data_emissao.desc(), CTeModel.id.desc())
+            .offset((page - 1) * page_size)
+            .limit(page_size)
+        )
+        rows = self.db.execute(stmt).all()
+        itens = [
+            {
+                "id": cte.id, "chave": cte.chave, "numero": cte.numero,
+                "serie": cte.serie, "data_emissao": cte.data_emissao,
+                "transportadora_nome": nome,
+                "municipio_origem": cte.municipio_origem, "uf_origem": cte.uf_origem,
+                "municipio_destino": cte.municipio_destino, "uf_destino": cte.uf_destino,
+                "peso": cte.peso, "valor_frete": cte.valor_frete, "status": cte.status,
+                "origem_importacao": cte.origem_importacao,
+                "cancelado_em": cte.cancelado_em,
+            }
+            for cte, nome in rows
+        ]
+        return itens, int(total)
+
+    def excluir_por_ids(self, empresa_id: int, ids: list[int]) -> int:
+        """Exclui CT-es específicos selecionados na grid.
+
+        Restrito à empresa (isolamento multi-tenant): ids de outra empresa
+        são ignorados silenciosamente. Mesma limpeza de dependentes de
+        `excluir_por_empresa` (NF-es, outliers DLG, log de cancelamento
+        desvinculado).
+        """
+        from sqlalchemy import delete as sa_delete
+        from sqlalchemy import update as sa_update
+
+        if not ids:
+            return 0
+
+        ids_validos = [row[0] for row in self.db.execute(
+            select(CTeModel.id).where(
+                CTeModel.empresa_id == empresa_id, CTeModel.id.in_(ids),
+            )
+        ).all()]
+        if not ids_validos:
+            return 0
+
+        self.db.execute(
+            sa_update(CteCancelamentoModel)
+            .where(CteCancelamentoModel.cte_id.in_(ids_validos))
+            .values(cte_id=None)
+        )
+        self.db.execute(sa_delete(DlgOutlierModel).where(DlgOutlierModel.cte_id.in_(ids_validos)))
+        self.db.execute(sa_delete(NFeModel).where(NFeModel.cte_id.in_(ids_validos)))
+        self.db.execute(sa_delete(CTeModel).where(CTeModel.id.in_(ids_validos)))
+        self.db.commit()
+        return len(ids_validos)
 
 
 def _so_digitos(valor: str) -> str:
@@ -1108,8 +1363,12 @@ class HubLogisticoRepository(IHubLogisticoRepository):
     def __init__(self, db: Session):
         self.db = db
 
-    def list(self, apenas_ativos: bool = False) -> List[HubLogistico]:
-        stmt = select(HubLogisticoModel).order_by(HubLogisticoModel.nome)
+    def list(self, empresa_id: int, apenas_ativos: bool = False) -> List[HubLogistico]:
+        stmt = (
+            select(HubLogisticoModel)
+            .where(HubLogisticoModel.empresa_id == empresa_id)
+            .order_by(HubLogisticoModel.nome)
+        )
         if apenas_ativos:
             stmt = stmt.where(HubLogisticoModel.ativo.is_(True))
         return [mp.hub_to_domain(m) for m in self.db.scalars(stmt).all()]
@@ -1118,13 +1377,19 @@ class HubLogisticoRepository(IHubLogisticoRepository):
         m = self.db.get(HubLogisticoModel, id)
         return mp.hub_to_domain(m) if m else None
 
-    def get_by_codigo(self, codigo: str) -> Optional[HubLogistico]:
-        m = self.db.scalar(select(HubLogisticoModel).where(HubLogisticoModel.codigo == codigo))
+    def get_by_codigo(self, empresa_id: int, codigo: str) -> Optional[HubLogistico]:
+        m = self.db.scalar(
+            select(HubLogisticoModel).where(
+                HubLogisticoModel.empresa_id == empresa_id,
+                HubLogisticoModel.codigo == codigo,
+            )
+        )
         return mp.hub_to_domain(m) if m else None
 
     def create(self, hub: HubLogistico) -> HubLogistico:
         m = HubLogisticoModel(
-            codigo=hub.codigo, nome=hub.nome, descricao=hub.descricao, ativo=hub.ativo,
+            empresa_id=hub.empresa_id, codigo=hub.codigo,
+            nome=hub.nome, descricao=hub.descricao, ativo=hub.ativo,
         )
         self.db.add(m); self.db.commit(); self.db.refresh(m)
         return mp.hub_to_domain(m)
@@ -1195,17 +1460,22 @@ class BenchmarkCorredorRepository(IBenchmarkCorredorRepository):
     def __init__(self, db: Session):
         self.db = db
 
-    def list(self) -> List[BenchmarkCorredor]:
-        rows = self.db.scalars(select(BenchmarkCorredorModel)).all()
+    def list(self, empresa_id: int) -> List[BenchmarkCorredor]:
+        rows = self.db.scalars(
+            select(BenchmarkCorredorModel).where(BenchmarkCorredorModel.empresa_id == empresa_id)
+        ).all()
         return [mp.benchmark_corredor_to_domain(m) for m in rows]
 
     def get(self, id: int) -> Optional[BenchmarkCorredor]:
         m = self.db.get(BenchmarkCorredorModel, id)
         return mp.benchmark_corredor_to_domain(m) if m else None
 
-    def get_by_corredor(self, hub_origem: str, hub_destino: str) -> Optional[BenchmarkCorredor]:
+    def get_by_corredor(
+        self, empresa_id: int, hub_origem: str, hub_destino: str
+    ) -> Optional[BenchmarkCorredor]:
         m = self.db.scalar(
             select(BenchmarkCorredorModel).where(
+                BenchmarkCorredorModel.empresa_id == empresa_id,
                 BenchmarkCorredorModel.hub_origem_codigo == hub_origem,
                 BenchmarkCorredorModel.hub_destino_codigo == hub_destino,
             )
@@ -1215,12 +1485,14 @@ class BenchmarkCorredorRepository(IBenchmarkCorredorRepository):
     def upsert(self, corredor: BenchmarkCorredor) -> BenchmarkCorredor:
         m = self.db.scalar(
             select(BenchmarkCorredorModel).where(
+                BenchmarkCorredorModel.empresa_id == corredor.empresa_id,
                 BenchmarkCorredorModel.hub_origem_codigo == corredor.hub_origem_codigo,
                 BenchmarkCorredorModel.hub_destino_codigo == corredor.hub_destino_codigo,
             )
         )
         if not m:
             m = BenchmarkCorredorModel(
+                empresa_id=corredor.empresa_id,
                 hub_origem_codigo=corredor.hub_origem_codigo,
                 hub_destino_codigo=corredor.hub_destino_codigo,
             )
@@ -1233,6 +1505,7 @@ class BenchmarkCorredorRepository(IBenchmarkCorredorRepository):
         m.frete_pct_max = corredor.frete_pct_max
         m.volume_referencia = corredor.volume_referencia
         m.dispersao_kg = corredor.dispersao_kg
+        m.prazo_dias_medio = corredor.prazo_dias_medio
         m.observacoes = corredor.observacoes
         self.db.commit(); self.db.refresh(m)
         return mp.benchmark_corredor_to_domain(m)

@@ -120,5 +120,15 @@ export function useDataGridEstado(chave, inicial = {}) {
   return { estado, patch, props };
 }
 
+/**
+ * Filtro de período compartilhado entre as telas do módulo Benchmark
+ * Mercado (Dashboard Executivo, Comparação com o Mercado, Potencial de
+ * Economia) — mesma chave de `useTelaEstado` nas 3, então definir o período
+ * numa tela já vale para as outras ao navegar entre elas.
+ */
+export function useBenchmarkPeriodo() {
+  return useTelaEstado("benchmark-mercado-periodo", { dataInicio: "", dataFim: "" });
+}
+
 const useTelaEstadoDefault = useTelaEstado;
 export default useTelaEstadoDefault;

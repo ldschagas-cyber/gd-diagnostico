@@ -20,10 +20,11 @@ const MESES_PT = [
 /**
  * Indicador de Base de CT-e (MELHORIA 1).
  *
- * Exibe a quantidade de CT-es armazenados por competência (mês/ano da emissão),
- * do período mais recente para o mais antigo. Competências sem registros não
- * são exibidas. Recarrega automaticamente após cada importação, via a prop
- * `recarregarSinal` (incrementada pela tela de importação ao concluir um lote).
+ * Demonstrativo tabular (sem gráfico) da quantidade de CT-es armazenados por
+ * competência (mês/ano da emissão), do período mais recente para o mais
+ * antigo. Competências sem registros não são exibidas. Recarrega
+ * automaticamente após cada importação, via a prop `recarregarSinal`
+ * (incrementada pela tela de importação ao concluir um lote).
  *
  * Permite ao usuário visualizar rapidamente o histórico de dados existente
  * antes de novas importações.

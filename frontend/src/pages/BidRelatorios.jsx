@@ -6,6 +6,7 @@ import {
 } from "@mui/material";
 import PictureAsPdfIcon from "@mui/icons-material/PictureAsPdf";
 import TableChartIcon from "@mui/icons-material/TableChart";
+import CodeIcon from "@mui/icons-material/Code";
 import DescriptionIcon from "@mui/icons-material/Description";
 import BarChartIcon from "@mui/icons-material/BarChart";
 import SavingsIcon from "@mui/icons-material/Savings";
@@ -23,7 +24,8 @@ const RELATORIOS = [
     titulo: "Relatório Executivo",
     descricao: "Visão consolidada do BID: escopo, participantes, propostas recebidas e resultado geral.",
     icone: <DescriptionIcon sx={{ fontSize: 36, color: GD.indigo }} />,
-    temExcel: true,
+    temExcel: false,
+    temHtml: true,
   },
   {
     tipo: "comparativo",
@@ -152,6 +154,19 @@ export default function BidRelatorios() {
                     sx={{ bgcolor: "#375623", "&:hover": { bgcolor: "#224016" } }}
                   >
                     {baixando[`${rel.tipo}_excel`] ? "Gerando..." : "Excel"}
+                  </Button>
+                )}
+
+                {rel.temHtml && (
+                  <Button
+                    size="small"
+                    variant="contained"
+                    startIcon={<CodeIcon />}
+                    onClick={() => baixar(rel.tipo, "html")}
+                    disabled={!!baixando[`${rel.tipo}_html`]}
+                    sx={{ bgcolor: GD.indigo, "&:hover": { bgcolor: GD.indigoDark } }}
+                  >
+                    {baixando[`${rel.tipo}_html`] ? "Gerando..." : "HTML"}
                   </Button>
                 )}
               </CardActions>

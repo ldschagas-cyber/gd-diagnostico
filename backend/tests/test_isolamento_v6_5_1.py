@@ -105,11 +105,14 @@ def test_isolamento_bid_mcl_transportadora_inteligencia_e_usuarios(client):
         "/api/v1/benchmark-v2/indicadores-regionais", params={"empresa_id": empresa_b}, headers=user_a
     ).status_code == 403
 
-    # ── Metas e matriz de mercado são globais (sem empresa_id) — leitura livre,
-    #    mas escrita restrita a admin. Um ANALISTA não pode alterá-las. ──
+    # ── Metas agora são por-empresa (v6.13) — um ANALISTA da Empresa A não pode
+    #    alterar a meta da Empresa B trocando o empresa_id na URL. ──
     assert client.put(
-        "/api/v1/metas/nacional", json={"meta_rs_kg": 1.0, "meta_pct_frete": 5.0}, headers=user_a
+        f"/api/v1/empresas/{empresa_b}/metas/nacional",
+        json={"meta_rs_kg": 1.0, "meta_pct_frete": 5.0}, headers=user_a,
     ).status_code == 403
+
+    # ── Matriz de mercado continua global — leitura livre, escrita restrita a admin. ──
     assert client.put(
         "/api/v1/benchmark-v2/mercado",
         json={"origem_regiao": "SUDESTE", "destino_regiao": "SUL",

@@ -46,7 +46,7 @@ def _moeda(v: float) -> str:
 
 
 def _rs_kg(v: float) -> str:
-    return f"R$ {v:,.4f}/kg".replace(",", "X").replace(".", ",").replace("X", ".")
+    return f"R$ {v:,.2f}/kg".replace(",", "X").replace(".", ",").replace("X", ".")
 
 
 def _pct(v: float) -> str:
@@ -322,6 +322,7 @@ class RecomendacoesUseCase:
                 ),
                 economia_estimada=round(impacto_rs, 2),
                 prioridade="CRITICA",
+                dados={"acao_recomendada": detalhe.get("acao_recomendada")} if detalhe.get("acao_recomendada") else None,
             )
 
         # Top-3 clientes SEM_REF — oportunidade de cadastro (mesmo padrão de

@@ -2,8 +2,8 @@
 
 Permite ao administrador manter os indicadores de referência por região,
 sem necessidade de alteração de código (Configurações > Benchmarks).
-A leitura é liberada a qualquer usuário autenticado; a edição é restrita
-a administradores.
+Parâmetro global da plataforma — leitura e edição restritas a
+administradores (tela "Parâmetros de Mercado").
 """
 from fastapi import APIRouter, Depends, HTTPException
 
@@ -11,7 +11,6 @@ from app.domain.entities import Benchmark, RegiaoBenchmarkEnum
 from app.presentation.api.dependencies import (
     get_benchmark_repo,
     get_current_superuser,
-    get_current_user,
 )
 from app.presentation.schemas import BenchmarkIn, BenchmarkOut
 
@@ -19,8 +18,8 @@ router = APIRouter(prefix="/benchmarks", tags=["Benchmarks"])
 
 
 @router.get("", response_model=list[BenchmarkOut])
-def listar_benchmarks(_=Depends(get_current_user), repo=Depends(get_benchmark_repo)):
-    """Lista os benchmarks de todas as regiões (e o nacional)."""
+def listar_benchmarks(_=Depends(get_current_superuser), repo=Depends(get_benchmark_repo)):
+    """Lista os benchmarks de todas as regiões (e o nacional). Apenas admin."""
     return repo.list()
 
 

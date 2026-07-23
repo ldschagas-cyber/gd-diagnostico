@@ -82,7 +82,8 @@ class User:
     is_active: bool = True
     is_superuser: bool = False
     role: RoleEnum = RoleEnum.ANALISTA
-    empresa_id: Optional[int] = None   # multi-tenant: None + superuser = acesso global
+    empresa_id: Optional[int] = None   # empresa padrão/preferida (pré-seleção na tela de login)
+    empresas_ids: List[int] = field(default_factory=list)  # vínculo real (M:N) — fonte de verdade da autorização
     created_at: Optional[datetime] = None
 
 
@@ -143,6 +144,7 @@ class Cidade:
 @dataclass
 class MetaNacional:
     id: Optional[int] = None
+    empresa_id: int = 0
     meta_rs_kg: float = 0.0
     meta_pct_frete: float = 0.0
 
@@ -150,10 +152,40 @@ class MetaNacional:
 @dataclass
 class MetaRegional:
     id: Optional[int] = None
+    empresa_id: int = 0
     macro_regiao: MacroRegiaoEnum = MacroRegiaoEnum.SUDESTE
     meta_rs_kg: float = 0.0
     meta_pct_frete: float = 0.0
     prazo_medio_meta: int = 0
+    orcamento_mensal: float = 0.0
+
+
+class StatusFechamentoEnum(str, Enum):
+    ABERTO = "ABERTO"
+    FECHADO = "FECHADO"
+
+
+@dataclass
+class FechamentoMensal:
+    """Fechamento de Custo de Frete — um registro por empresa e competência.
+
+    Faturamento é informado por região; devolução e frete complementar são
+    totais nacionais. Frete realizado e budget não moram aqui — são sempre
+    calculados a partir do CT-e e de MetaRegional (RN: nunca duplicar dado
+    que já existe automático)."""
+
+    id: Optional[int] = None
+    empresa_id: int = 0
+    competencia: str = ""  # "AAAA-MM"
+    fat_norte: float = 0.0
+    fat_nordeste: float = 0.0
+    fat_centro_oeste: float = 0.0
+    fat_sudeste: float = 0.0
+    fat_sul: float = 0.0
+    devolucao: float = 0.0
+    frete_complementar: float = 0.0
+    status: StatusFechamentoEnum = StatusFechamentoEnum.ABERTO
+    fechado_em: Optional[datetime] = None
 
 
 @dataclass
@@ -191,14 +223,14 @@ class Benchmark:
 
 @dataclass
 class HubLogistico:
-    """Hub logístico — vocabulário global de clusters de origem/destino.
+    """Hub logístico — catálogo próprio de cada empresa-cliente.
 
-    O nome é controlado globalmente para que a referência de corredor
-    (global) consiga casar com o cluster de qualquer cliente. O cliente
-    escolhe QUAIS UFs caem em cada hub; o NOME do hub vem desta lista.
+    Cada empresa cria e mantém seu próprio catálogo de hubs, sem afetar
+    outras empresas. O código é único apenas dentro da empresa.
     """
 
     id: Optional[int] = None
+    empresa_id: int = 0
     codigo: str = ""           # ex.: "SUDESTE_HUB" (estável, usado em chaves)
     nome: str = ""             # ex.: "Sudeste Hub" (exibição)
     descricao: str = ""
@@ -224,7 +256,7 @@ class ClusterCliente:
 
 @dataclass
 class BenchmarkCorredor:
-    """Referência de mercado GLOBAL por corredor (Hub origem → Hub destino).
+    """Referência de mercado por corredor (Hub origem → Hub destino), por empresa.
 
     Substitui a lógica regional como base de cálculo. Inclui volume de
     referência e dispersão (desvio-padrão relativo) do fluxo, usados na
@@ -232,6 +264,7 @@ class BenchmarkCorredor:
     """
 
     id: Optional[int] = None
+    empresa_id: int = 0
     hub_origem_codigo: str = ""
     hub_destino_codigo: str = ""
     frete_kg_min: float = 0.0
@@ -242,6 +275,7 @@ class BenchmarkCorredor:
     frete_pct_max: float = 0.0
     volume_referencia: float = 0.0   # volume de mercado do fluxo (peso/qtd) — ponderação
     dispersao_kg: float = 0.0        # desvio-padrão relativo do R$/kg (0-1) — suavização
+    prazo_dias_medio: float = 0.0    # prazo de entrega de referência do corredor (0 = não cadastrado)
     observacoes: str = ""
 
     @property

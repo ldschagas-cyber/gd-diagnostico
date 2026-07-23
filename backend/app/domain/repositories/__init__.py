@@ -11,6 +11,7 @@ from app.domain.entities import (
     CTe,
     Cidade,
     Empresa,
+    FechamentoMensal,
     Filial,
     MetaNacional,
     MetaRegional,
@@ -83,7 +84,7 @@ class ICidadeRepository(IRepository[Cidade]):
 
 class IMetaNacionalRepository(ABC):
     @abstractmethod
-    def get(self) -> Optional[MetaNacional]: ...
+    def get(self, empresa_id: int) -> Optional[MetaNacional]: ...
 
     @abstractmethod
     def upsert(self, meta: MetaNacional) -> MetaNacional: ...
@@ -91,10 +92,27 @@ class IMetaNacionalRepository(ABC):
 
 class IMetaRegionalRepository(ABC):
     @abstractmethod
-    def list(self) -> List[MetaRegional]: ...
+    def list(self, empresa_id: int) -> List[MetaRegional]: ...
 
     @abstractmethod
     def upsert(self, meta: MetaRegional) -> MetaRegional: ...
+
+
+class IFechamentoMensalRepository(ABC):
+    @abstractmethod
+    def get_by_competencia(self, empresa_id: int, competencia: str) -> Optional[FechamentoMensal]: ...
+
+    @abstractmethod
+    def list_historico(self, empresa_id: int, limite: int = 13) -> List[FechamentoMensal]: ...
+
+    @abstractmethod
+    def upsert(self, fechamento: FechamentoMensal) -> FechamentoMensal: ...
+
+    @abstractmethod
+    def fechar(self, empresa_id: int, competencia: str) -> Optional[FechamentoMensal]: ...
+
+    @abstractmethod
+    def reabrir(self, empresa_id: int, competencia: str) -> Optional[FechamentoMensal]: ...
 
 
 class IBenchmarkRepository(ABC):
@@ -114,11 +132,11 @@ from app.domain.entities import BenchmarkCorredor, ClusterCliente, HubLogistico
 
 class IHubLogisticoRepository(ABC):
     @abstractmethod
-    def list(self, apenas_ativos: bool = False) -> List[HubLogistico]: ...
+    def list(self, empresa_id: int, apenas_ativos: bool = False) -> List[HubLogistico]: ...
     @abstractmethod
     def get(self, id: int) -> Optional[HubLogistico]: ...
     @abstractmethod
-    def get_by_codigo(self, codigo: str) -> Optional[HubLogistico]: ...
+    def get_by_codigo(self, empresa_id: int, codigo: str) -> Optional[HubLogistico]: ...
     @abstractmethod
     def create(self, hub: HubLogistico) -> HubLogistico: ...
     @abstractmethod
@@ -142,11 +160,13 @@ class IClusterClienteRepository(ABC):
 
 class IBenchmarkCorredorRepository(ABC):
     @abstractmethod
-    def list(self) -> List[BenchmarkCorredor]: ...
+    def list(self, empresa_id: int) -> List[BenchmarkCorredor]: ...
     @abstractmethod
     def get(self, id: int) -> Optional[BenchmarkCorredor]: ...
     @abstractmethod
-    def get_by_corredor(self, hub_origem: str, hub_destino: str) -> Optional[BenchmarkCorredor]: ...
+    def get_by_corredor(
+        self, empresa_id: int, hub_origem: str, hub_destino: str
+    ) -> Optional[BenchmarkCorredor]: ...
     @abstractmethod
     def upsert(self, corredor: BenchmarkCorredor) -> BenchmarkCorredor: ...
     @abstractmethod
@@ -156,6 +176,14 @@ class IBenchmarkCorredorRepository(ABC):
 class ICTeRepository(IRepository[CTe]):
     @abstractmethod
     def get_by_chave(self, chave: str) -> Optional[CTe]: ...
+
+    @abstractmethod
+    def get_chaves_existentes(self, chaves: List[str]) -> set:
+        """Retorna, dentre as chaves informadas, as que já existem no banco (qualquer empresa).
+
+        Usado para checar duplicidade em lote (uma query) em vez de uma query por CT-e.
+        """
+        ...
 
     @abstractmethod
     def list_by_empresa(
@@ -178,6 +206,13 @@ class ICTeRepository(IRepository[CTe]):
     def agregar_por_regiao(
         self, empresa_id: int, data_inicio=None, data_fim=None, apenas_ativos: bool = True
     ) -> list: ...
+
+    @abstractmethod
+    def intervalo_datas(
+        self, empresa_id: int, data_inicio=None, data_fim=None, apenas_ativos: bool = True
+    ) -> tuple:
+        """Retorna (MIN, MAX) de data_emissao dos CT-es que atendem ao filtro."""
+        ...
 
     @abstractmethod
     def agregar_por_transportadora(

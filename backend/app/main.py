@@ -1,4 +1,4 @@
-"""Ponto de entrada da aplicação FastAPI — GD Frete Diagnóstico.
+"""Ponto de entrada da aplicação FastAPI — GD Diagnóstico Logístico.
 
 Configura logging (RNF002), CORS (RNF003), documentação Swagger (RNF005),
 registra todos os routers da API v1 e executa a rotina de seed na inicialização.
@@ -55,7 +55,6 @@ logger = get_logger(__name__)
 # Por padrão usa o IP remoto como chave de identificação.
 limiter = Limiter(key_func=get_remote_address, default_limits=["200/minute"])
 
-MACRO_REGIOES_SEED = ["NORTE", "NORDESTE", "CENTRO_OESTE", "SUDESTE", "SUL"]
 BENCHMARKS_SEED = [
     ("NACIONAL", 1.30, 1.65, 2.00, 8.0, 10.0, 12.0),
     ("NORTE", 2.50, 3.75, 5.00, 15.0, 22.0, 30.0),
@@ -63,16 +62,6 @@ BENCHMARKS_SEED = [
     ("CENTRO_OESTE", 1.20, 1.60, 2.00, 7.0, 9.5, 12.0),
     ("SUDESTE", 0.70, 0.95, 1.20, 4.0, 6.0, 8.0),
     ("SUL", 0.80, 1.10, 1.40, 5.0, 7.0, 9.0),
-]
-
-# V2.1 — Hubs logísticos padrão (catálogo global). O cliente pode criar
-# outros e mapear UFs/municípios a eles. As 5 macrorregiões servem de base.
-HUBS_SEED = [
-    ("SUDESTE_HUB", "Sudeste Hub", "Cluster logístico da região Sudeste"),
-    ("SUL_HUB", "Sul Hub", "Cluster logístico da região Sul"),
-    ("NORDESTE_HUB", "Nordeste Hub", "Cluster logístico da região Nordeste"),
-    ("NORTE_HUB", "Norte Hub", "Cluster logístico da região Norte"),
-    ("CENTRO_OESTE_HUB", "Centro-Oeste Hub", "Cluster logístico da região Centro-Oeste"),
 ]
 
 
@@ -283,6 +272,8 @@ def _aplicar_alteracoes_incrementais() -> None:
         "CREATE INDEX IF NOT EXISTS ix_recomendacoes_prioridade ON recomendacoes (prioridade)",
         # ── V6.4.0 — MELHORIA 9: dimensão CLIENTE → FILIAL (dados) ──
         "UPDATE dlg_analitico SET dimensao='FILIAL' WHERE dimensao='CLIENTE'",
+        # ── V6.11.0 — Simulador de Hub: prazo de referência por corredor ──
+        "ALTER TABLE benchmarks_corredor ADD COLUMN IF NOT EXISTS prazo_dias_medio FLOAT NOT NULL DEFAULT 0",
     ]
 
     is_sqlite = str(engine.url).startswith("sqlite")
@@ -322,14 +313,9 @@ def seed_inicial() -> None:
             ))
             logger.info("Usuário administrador inicial criado: %s", settings.FIRST_SUPERUSER_EMAIL)
 
-        if not existe(MetaNacionalModel):
-            db.add(MetaNacionalModel(meta_rs_kg=0.0, meta_pct_frete=0.0))
-
-        for macro in MACRO_REGIOES_SEED:
-            if not existe(MetaRegionalModel, MetaRegionalModel.macro_regiao == macro):
-                db.add(MetaRegionalModel(
-                    macro_regiao=macro, meta_rs_kg=0.0, meta_pct_frete=0.0, prazo_medio_meta=0,
-                ))
+        # Metas (nacional/regional) não são mais globais — cada empresa
+        # ganha seu próprio conjunto zerado ao ser criada (ver
+        # seed_metas_padroes, chamado em empresas.py::criar()).
 
         for (regiao, kg_min, kg_med, kg_max, pct_min, pct_med, pct_max) in BENCHMARKS_SEED:
             if not existe(BenchmarkModel, BenchmarkModel.regiao == regiao):
@@ -338,10 +324,8 @@ def seed_inicial() -> None:
                     frete_pct_min=pct_min, frete_pct_medio=pct_med, frete_pct_max=pct_max,
                 ))
 
-        # V2.1 — catálogo de hubs logísticos
-        for (codigo, nome, descricao) in HUBS_SEED:
-            if not existe(HubLogisticoModel, HubLogisticoModel.codigo == codigo):
-                db.add(HubLogisticoModel(codigo=codigo, nome=nome, descricao=descricao, ativo=True))
+        # Hubs logísticos não são mais um catálogo global — cada empresa
+        # cria e mantém o seu próprio, sem seed automático (v6.13).
 
         db.commit()
         logger.info("Seed concluído.")
@@ -438,7 +422,7 @@ app = FastAPI(
     title=settings.PROJECT_NAME,
     version=settings.VERSION,
     description=(
-        "API do GD Frete Diagnóstico — diagnóstico de custos logísticos a partir "
+        "API do GD Diagnóstico Logístico — diagnóstico de custos logísticos a partir "
         "da importação de CT-es, NF-es e planilhas, com indicadores nacionais, "
         "regionais, por transportadora e de prazo, além de relatórios em Excel e PDF."
     ),

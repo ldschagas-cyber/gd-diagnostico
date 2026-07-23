@@ -20,6 +20,7 @@ import {
   dashboardApi,
   dlgApi,
   empresasApi,
+  fechamentoApi,
   hubsApi,
   importacaoApi,
   inteligenciaApi,
@@ -147,39 +148,84 @@ export function useMutacoesCadastro(api, queryKey) {
   };
 }
 
-/* ───────────────────────────── Metas ────────────────────────────────────── */
+/* ───────────────────────────── Metas (por empresa) ──────────────────────── */
 
-export function useMetaNacional(opts = {}) {
+export function useMetaNacional(empresaId, opts = {}) {
   return useQuery({
-    queryKey: qk.metasNacional(),
-    queryFn: metasApi.obterNacional,
+    queryKey: qk.metasNacional(empresaId),
+    queryFn: () => metasApi.obterNacional(empresaId),
+    ...comEmpresa(empresaId),
     ...opts,
   });
 }
 
-export function useMetasRegionais(opts = {}) {
+export function useMetasRegionais(empresaId, opts = {}) {
   return useQuery({
-    queryKey: qk.metasRegionais(),
-    queryFn: metasApi.listarRegionais,
+    queryKey: qk.metasRegionais(empresaId),
+    queryFn: () => metasApi.listarRegionais(empresaId),
+    ...comEmpresa(empresaId),
     ...opts,
   });
 }
 
-export function useSalvarMetas() {
+export function useSalvarMetas(empresaId) {
   const qc = useQueryClient();
   return {
     nacional: useMutation({
-      mutationFn: (payload) => metasApi.salvarNacional(payload),
-      onSuccess: () => qc.invalidateQueries({ queryKey: qk.metasNacional() }),
+      mutationFn: (payload) => metasApi.salvarNacional(empresaId, payload),
+      onSuccess: () => qc.invalidateQueries({ queryKey: qk.metasNacional(empresaId) }),
     }),
     regional: useMutation({
-      mutationFn: (payload) => metasApi.salvarRegional(payload),
-      onSuccess: () => qc.invalidateQueries({ queryKey: qk.metasRegionais() }),
+      mutationFn: (payload) => metasApi.salvarRegional(empresaId, payload),
+      onSuccess: () => qc.invalidateQueries({ queryKey: qk.metasRegionais(empresaId) }),
     }),
   };
 }
 
-/* ──────────────── Benchmark % Frete (legado, v6.10.0 — consolidado em /metas) ──── */
+/* ──────────────── Fechamento de Custo de Frete (fechamento mensal) ───────── */
+
+export function useFechamentoMensal(empresaId, competencia, opts = {}) {
+  return useQuery({
+    queryKey: qk.fechamentoMensal(empresaId, competencia),
+    queryFn: () => fechamentoApi.obter(empresaId, competencia),
+    ...comEmpresa(empresaId),
+    enabled: !!empresaId && !!competencia,
+    ...opts,
+  });
+}
+
+export function useHistoricoFechamentos(empresaId, limite = 13, opts = {}) {
+  return useQuery({
+    queryKey: qk.fechamentoHistorico(empresaId, limite),
+    queryFn: () => fechamentoApi.historico(empresaId, limite),
+    ...comEmpresa(empresaId),
+    ...opts,
+  });
+}
+
+export function useFechamentoMutacoes(empresaId) {
+  const qc = useQueryClient();
+  const invalidar = () => {
+    qc.invalidateQueries({ queryKey: ["fechamento", "mensal", empresaId] });
+    qc.invalidateQueries({ queryKey: qk.fechamentoHistorico(empresaId) });
+  };
+  return {
+    salvar: useMutation({
+      mutationFn: (payload) => fechamentoApi.salvar(empresaId, payload),
+      onSuccess: invalidar,
+    }),
+    fechar: useMutation({
+      mutationFn: (competencia) => fechamentoApi.fechar(empresaId, competencia),
+      onSuccess: invalidar,
+    }),
+    reabrir: useMutation({
+      mutationFn: (competencia) => fechamentoApi.reabrir(empresaId, competencia),
+      onSuccess: invalidar,
+    }),
+  };
+}
+
+/* ──────────────── Benchmark % Frete (legado, tela Parâmetros de Mercado) ──── */
 
 export function useBenchmarksPct(opts = {}) {
   return useQuery({ queryKey: qk.benchmarksRegioes(), queryFn: benchmarksApi.listar, ...opts });
@@ -257,8 +303,14 @@ export function useRecomendacoesResumo(empresaId) {
 
 export function useMutacoesRecomendacao(empresaId) {
   const qc = useQueryClient();
-  const invalidar = () =>
+  // A chave do resumo é ["recomendacoes", "resumo", empresaId] — "resumo" na
+  // posição 1, não empresaId — então invalidar só ["recomendacoes", empresaId]
+  // bate com a lista mas não com o resumo, deixando os cards de totalizador
+  // presos no valor do primeiro carregamento da tela.
+  const invalidar = () => {
     qc.invalidateQueries({ queryKey: ["recomendacoes", empresaId] });
+    qc.invalidateQueries({ queryKey: qk.recomendacoesResumo(empresaId) });
+  };
   return {
     consolidar: useMutation({
       mutationFn: () => recomendacoesApi.consolidar(empresaId),
@@ -386,6 +438,16 @@ export function useIndicadoresMercado(empresaId, params = {}) {
   });
 }
 
+/* Só habilita quando os dois hubs foram escolhidos (além de haver empresa ativa) —
+   evita disparar a simulação com um par incompleto. */
+export function useSimuladorHub(empresaId, params = {}) {
+  return useQuery({
+    queryKey: qk.benchmarkSimuladorHub(empresaId, params),
+    queryFn: () => benchmarkApi.simuladorHub(empresaId, params),
+    enabled: !!empresaId && !!params.hub_atual && !!params.hub_alt,
+  });
+}
+
 export function useClusters(empresaId) {
   return useQuery({
     queryKey: qk.clusters(empresaId),
@@ -413,36 +475,57 @@ export function useMutacoesCluster(empresaId) {
   };
 }
 
-export function useHubs(apenasAtivos = false) {
+export function useHubs(empresaId, apenasAtivos = false) {
   return useQuery({
-    queryKey: qk.hubs(apenasAtivos),
-    queryFn: () => hubsApi.listar(apenasAtivos),
+    queryKey: qk.hubs(empresaId, apenasAtivos),
+    queryFn: () => hubsApi.listar(empresaId, apenasAtivos),
+    ...comEmpresa(empresaId),
   });
 }
 
-export function useMutacoesHub() {
+export function useMutacoesHub(empresaId) {
   const qc = useQueryClient();
-  const invalidar = () => qc.invalidateQueries({ queryKey: ["hubs"] });
+  const invalidar = () => qc.invalidateQueries({ queryKey: qk.hubs(empresaId) });
   return {
-    criar: useMutation({ mutationFn: (payload) => hubsApi.criar(payload), onSuccess: invalidar }),
-    atualizar: useMutation({
-      mutationFn: ({ id, payload }) => hubsApi.atualizar(id, payload),
+    criar: useMutation({
+      mutationFn: (payload) => hubsApi.criar(empresaId, payload),
       onSuccess: invalidar,
     }),
-    remover: useMutation({ mutationFn: (id) => hubsApi.remover(id), onSuccess: invalidar }),
+    atualizar: useMutation({
+      mutationFn: ({ id, payload }) => hubsApi.atualizar(empresaId, id, payload),
+      onSuccess: invalidar,
+    }),
+    remover: useMutation({
+      mutationFn: (id) => hubsApi.remover(empresaId, id),
+      onSuccess: invalidar,
+    }),
   };
 }
 
-export function useCorredoresRef() {
-  return useQuery({ queryKey: qk.corredoresRef(), queryFn: corredoresApi.listar });
+export function useCorredoresRef(empresaId) {
+  return useQuery({
+    queryKey: qk.corredoresRef(empresaId),
+    queryFn: () => corredoresApi.listar(empresaId),
+    ...comEmpresa(empresaId),
+  });
 }
 
-export function useMutacoesCorredorRef() {
+export function useMutacoesCorredorRef(empresaId) {
   const qc = useQueryClient();
-  const invalidar = () => qc.invalidateQueries({ queryKey: qk.corredoresRef() });
+  const invalidar = () => qc.invalidateQueries({ queryKey: qk.corredoresRef(empresaId) });
   return {
-    salvar: useMutation({ mutationFn: (payload) => corredoresApi.salvar(payload), onSuccess: invalidar }),
-    remover: useMutation({ mutationFn: (id) => corredoresApi.remover(id), onSuccess: invalidar }),
+    salvar: useMutation({
+      mutationFn: (payload) => corredoresApi.salvar(empresaId, payload),
+      onSuccess: invalidar,
+    }),
+    remover: useMutation({
+      mutationFn: (id) => corredoresApi.remover(empresaId, id),
+      onSuccess: invalidar,
+    }),
+    importarExcel: useMutation({
+      mutationFn: (file) => corredoresApi.importarExcel(empresaId, file),
+      onSuccess: invalidar,
+    }),
   };
 }
 
@@ -456,6 +539,7 @@ export function useMutacoesMercadoOD() {
   return {
     salvar: useMutation({ mutationFn: (payload) => mercadoApi.salvar(payload), onSuccess: invalidar }),
     remover: useMutation({ mutationFn: (id) => mercadoApi.remover(id), onSuccess: invalidar }),
+    importarExcel: useMutation({ mutationFn: (file) => mercadoApi.importarExcel(file), onSuccess: invalidar }),
   };
 }
 
@@ -666,8 +750,8 @@ export function useMutacoesMcl(bidId) {
 
 /* ───────────────────── Inteligência Logística (IA) ───────────────────────── */
 
-export function useIaStatus() {
-  return useQuery({ queryKey: qk.iaStatus(), queryFn: inteligenciaApi.status });
+export function useIaStatus(opts = {}) {
+  return useQuery({ queryKey: qk.iaStatus(), queryFn: inteligenciaApi.status, ...opts });
 }
 
 export function useIaUso(empresaId) {
@@ -718,11 +802,12 @@ export function useIaDiagnostico(empresaId) {
   });
 }
 
-export function useIaScoreHistorico(empresaId) {
+export function useIaScoreHistorico(empresaId, opts = {}) {
   return useQuery({
     queryKey: qk.iaScoreHistorico(empresaId),
     queryFn: () => inteligenciaApi.historicoScore(empresaId),
     ...comEmpresa(empresaId),
+    ...opts,
   });
 }
 
@@ -734,11 +819,12 @@ export function useIaDiagnosticoHistorico(empresaId) {
   });
 }
 
-export function useIaBenchmarkSetorial(empresaId) {
+export function useIaBenchmarkSetorial(empresaId, opts = {}) {
   return useQuery({
     queryKey: qk.iaBenchmarkSetorial(empresaId),
     queryFn: () => inteligenciaApi.benchmarkSetorial(empresaId),
     ...comEmpresa(empresaId),
+    ...opts,
   });
 }
 

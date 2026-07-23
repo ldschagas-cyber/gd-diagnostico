@@ -33,13 +33,23 @@ from app.infrastructure.database.models import (
     ClusterClienteModel,
     CTeModel,
     DlgOutlierModel,
+    FilialModel,
     HubLogisticoModel,
     MblBenchmarkModel,
+    TransportadoraModel,
 )
+from app.application.use_cases.dlg import _ident_cliente
 
 # Amostra mínima por segmento (configurável via processar()). Abaixo disso o
 # segmento entra como low_confidence e não deve compor ranking oficial.
 THRESHOLD_AMOSTRA_PADRAO = 5
+
+# Corte de cardinalidade para dimensões potencialmente numerosas (CLIENTE,
+# FILIAL) — sem isso, centenas de clientes distintos × 3 métricas × N
+# períodos geram milhares de linhas persistidas por empresa. Mantém só os
+# top-N segmentos por tamanho de amostra em cada período; TRANSPORTADORA não
+# precisa de corte (cardinalidade naturalmente baixa).
+TOP_N_DIMENSAO_PADRAO = 100
 
 METRICAS = ("RS_KG", "PCT_FRETE", "CUSTO_ENTREGA")
 
@@ -70,6 +80,7 @@ class MblUseCase:
         data_inicio: Optional[date] = None,
         data_fim: Optional[date] = None,
         threshold: int = THRESHOLD_AMOSTRA_PADRAO,
+        top_n_dimensao: int = TOP_N_DIMENSAO_PADRAO,
     ) -> Dict:
         """Recalcula o benchmark MBL por período mensal, excluindo outliers do
         DLG. Idempotente: substitui as versões anteriores do mesmo período,
@@ -80,6 +91,8 @@ class MblUseCase:
 
         ids_outliers_por_periodo = self._outliers_por_periodo(empresa_id)
         clusters = self._mapa_clusters(empresa_id)
+        transportadoras = self._mapa_transportadoras(empresa_id)
+        filiais = self._mapa_filiais(empresa_id)
 
         # agrupa por período (mensal)
         por_periodo: Dict[str, List[CTeModel]] = defaultdict(list)
@@ -91,7 +104,8 @@ class MblUseCase:
         for periodo, lote in por_periodo.items():
             outliers_ids = ids_outliers_por_periodo.get(periodo, set())
             linhas = self._processar_periodo(
-                empresa_id, periodo, lote, outliers_ids, clusters, threshold
+                empresa_id, periodo, lote, outliers_ids, clusters,
+                transportadoras, filiais, threshold, top_n_dimensao,
             )
             total_linhas += linhas
             periodos.append(periodo)
@@ -148,6 +162,22 @@ class MblUseCase:
         # match exato UF+município, depois fallback UF inteira
         return mapa.get((uf, mun)) or mapa.get((uf, "")) or None
 
+    def _mapa_transportadoras(self, empresa_id: int) -> Dict[int, str]:
+        """id → nome, mesmo padrão de `_mapa_clusters` (carregado uma vez,
+        fora do loop por CT-e, evitando N+1)."""
+        rows = self.db.execute(
+            select(TransportadoraModel).where(TransportadoraModel.empresa_id == empresa_id)
+        ).scalars().all()
+        return {t.id: (t.nome_fantasia or t.razao_social) for t in rows}
+
+    def _mapa_filiais(self, empresa_id: int) -> Dict[str, str]:
+        """CNPJ (só dígitos, já persistido assim) → razão social da filial.
+        Não há FK direta filial↔CT-e; o cruzamento é por `tomador_cnpj`."""
+        rows = self.db.execute(
+            select(FilialModel).where(FilialModel.empresa_id == empresa_id)
+        ).scalars().all()
+        return {f.cnpj: f.razao_social for f in rows if f.cnpj}
+
     # ── processamento de um período ─────────────────────────────────────────
 
     def _processar_periodo(
@@ -157,7 +187,10 @@ class MblUseCase:
         ctes: List[CTeModel],
         outliers_ids: set,
         clusters: Dict,
+        transportadoras: Dict[int, str],
+        filiais: Dict[str, str],
         threshold: int,
+        top_n_dimensao: int = TOP_N_DIMENSAO_PADRAO,
     ) -> int:
         # próxima versão (auditoria): MAX(versao)+1 do período
         versao_atual = self.db.scalar(
@@ -180,6 +213,16 @@ class MblUseCase:
         # estrutura: amostras[(dim, seg, metrica)] = [valores...]
         amostras: Dict[Tuple[str, str, str], List[float]] = defaultdict(list)
         outliers_excluidos = 0
+
+        # nome do cliente por identidade RN-68 (raiz de CNPJ ou nome
+        # normalizado) — pré-carregado para que o mesmo cliente sempre vire
+        # o mesmo `segmento` (string), independentemente de variação de
+        # grafia do destinatário entre CT-es (primeiro nome não vazio vence).
+        nomes_cliente: Dict[Tuple[str, Optional[str]], str] = {}
+        for c in ctes:
+            ident = _ident_cliente(c)
+            if ident not in nomes_cliente and c.destinatario_nome:
+                nomes_cliente[ident] = c.destinatario_nome
 
         for c in ctes:
             if c.id in outliers_ids:
@@ -205,12 +248,26 @@ class MblUseCase:
             segmentos = [("REGIAO", regiao), ("ROTA", rota)]
             if cluster:
                 segmentos.append(("CLUSTER", cluster))
+            nome_transportadora = transportadoras.get(c.transportadora_id) if c.transportadora_id else None
+            if nome_transportadora:
+                segmentos.append(("TRANSPORTADORA", nome_transportadora))
+            nome_filial = filiais.get(c.tomador_cnpj) if c.tomador_cnpj else None
+            if nome_filial:
+                segmentos.append(("FILIAL", nome_filial))
+            tipo_cliente, valor_cliente = _ident_cliente(c)
+            if tipo_cliente == "SEM_ID":
+                label_cliente = "Cliente não identificado"
+            else:
+                label_cliente = nomes_cliente.get((tipo_cliente, valor_cliente)) or valor_cliente
+            segmentos.append(("CLIENTE", label_cliente))
 
             for dim, seg in segmentos:
                 amostras[(dim, seg, "RS_KG")].append(rs_kg)
                 amostras[(dim, seg, "CUSTO_ENTREGA")].append(custo_entrega)
                 if pct_frete is not None:
                     amostras[(dim, seg, "PCT_FRETE")].append(pct_frete)
+
+        self._aplicar_top_n(amostras, top_n_dimensao)
 
         # grava as estatísticas
         linhas = 0
@@ -238,6 +295,31 @@ class MblUseCase:
             linhas += 1
         return linhas
 
+    def _aplicar_top_n(
+        self, amostras: Dict[Tuple[str, str, str], List[float]], top_n: int
+    ) -> None:
+        """Corta CLIENTE/FILIAL para os top-N segmentos por tamanho de
+        amostra (referência: métrica RS_KG, sempre populada para todo
+        segmento), mutando `amostras` in-place antes da gravação. Evita
+        persistir milhares de linhas quando há centenas de clientes/filiais
+        distintos num único período."""
+        tamanho_por_segmento: Dict[Tuple[str, str], int] = {}
+        for (dim, seg, metrica), valores in amostras.items():
+            if metrica == "RS_KG":
+                tamanho_por_segmento[(dim, seg)] = len(valores)
+
+        for dim in ("CLIENTE", "FILIAL"):
+            segmentos_dim = [(seg, n) for (d, seg), n in tamanho_por_segmento.items() if d == dim]
+            if len(segmentos_dim) <= top_n:
+                continue
+            manter = {
+                seg for seg, _ in sorted(segmentos_dim, key=lambda x: x[1], reverse=True)[:top_n]
+            }
+            for chave in list(amostras.keys()):
+                d, seg, _ = chave
+                if d == dim and seg not in manter:
+                    del amostras[chave]
+
     # ── leitura / consulta ──────────────────────────────────────────────────
 
     def listar(
@@ -247,6 +329,7 @@ class MblUseCase:
         metrica: Optional[str] = None,
         periodo_ref: Optional[str] = None,
         segmento: Optional[str] = None,
+        segmento_contains: Optional[str] = None,
         incluir_low_confidence: bool = True,
     ) -> List[MblBenchmarkModel]:
         stmt = select(MblBenchmarkModel).where(
@@ -260,6 +343,8 @@ class MblUseCase:
             stmt = stmt.where(MblBenchmarkModel.periodo_ref == periodo_ref)
         if segmento:
             stmt = stmt.where(MblBenchmarkModel.segmento == segmento)
+        if segmento_contains:
+            stmt = stmt.where(MblBenchmarkModel.segmento.ilike(f"%{segmento_contains}%"))
         if not incluir_low_confidence:
             stmt = stmt.where(MblBenchmarkModel.low_confidence.is_(False))
         stmt = stmt.order_by(

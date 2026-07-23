@@ -1,5 +1,5 @@
 # ============================================================
-# GD Frete Diagnóstico — Backend (FastAPI)
+# GD Diagnóstico Logístico — Backend (FastAPI)
 # ============================================================
 FROM python:3.12-slim AS base
 

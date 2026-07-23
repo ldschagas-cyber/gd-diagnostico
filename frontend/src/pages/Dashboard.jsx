@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   Box,
   Grid,
@@ -13,6 +13,7 @@ import {
   TableRow,
   TableCell,
   TableBody,
+  TableSortLabel,
   Chip,
   CircularProgress,
   Alert,
@@ -46,6 +47,21 @@ import {
 } from "../utils/format";
 import { GD } from "../theme";
 
+// ---- Ranking de transportadoras: campo de ordenação (v6.11) ----
+const OPCOES_ORDENACAO_RANKING = [
+  { campo: "frete_total", rotulo: "Frete", tipo: "numero" },
+  { campo: "frete_rs_kg", rotulo: "R$/kg", tipo: "numero" },
+  { campo: "frete_pct", rotulo: "% de Frete", tipo: "numero" },
+  { campo: "custo_medio_entrega", rotulo: "Custo/entrega", tipo: "numero" },
+  { campo: "participacao_pct", rotulo: "Participação", tipo: "numero" },
+  { campo: "qtd_ctes", rotulo: "CT-es", tipo: "numero" },
+  { campo: "nome", rotulo: "Transportadora", tipo: "texto" },
+];
+// Direção padrão ao trocar de campo: texto começa A→Z, números começam do
+// maior para o menor (é um ranking — o topo é o mais relevante).
+const direcaoPadraoRanking = (campo) =>
+  OPCOES_ORDENACAO_RANKING.find((o) => o.campo === campo)?.tipo === "texto" ? "asc" : "desc";
+
 export default function Dashboard() {
   const { empresaAtiva, empresaAtivaId } = useEmpresa();
 
@@ -75,10 +91,35 @@ export default function Dashboard() {
     refetch();
   };
 
+  // Ordenação do Ranking de transportadoras — client-side, a lista completa
+  // já vem em diag.transportadoras (sem paginação/servidor envolvido).
+  const [ordenacaoRanking, setOrdenacaoRanking] = useState({
+    campo: "frete_total",
+    direcao: "desc",
+  });
+  const ordenarPorColuna = (campo) =>
+    setOrdenacaoRanking((s) =>
+      s.campo === campo
+        ? { campo, direcao: s.direcao === "asc" ? "desc" : "asc" }
+        : { campo, direcao: direcaoPadraoRanking(campo) }
+    );
+
+  const transportadorasOrdenadas = useMemo(() => {
+    const lista = diag?.transportadoras || [];
+    const { campo, direcao } = ordenacaoRanking;
+    const ehTexto = campo === "nome";
+    return [...lista].sort((a, b) => {
+      const cmp = ehTexto
+        ? String(a[campo] || "").localeCompare(String(b[campo] || ""), "pt-BR")
+        : (a[campo] || 0) - (b[campo] || 0);
+      return direcao === "asc" ? cmp : -cmp;
+    });
+  }, [diag?.transportadoras, ordenacaoRanking]);
+
   if (!empresaAtivaId) {
     return (
       <Box>
-        <PageHeader titulo="Dashboard" subtitulo="Diagnóstico de custos logísticos" />
+        <PageHeader titulo="Diagnóstico Logístico" subtitulo="Diagnóstico de custos logísticos" />
         <VazioEstado
           mensagem="Selecione uma empresa"
           descricao="Cadastre e selecione uma empresa ativa para visualizar o diagnóstico."
@@ -93,7 +134,7 @@ export default function Dashboard() {
   return (
     <Box>
       <PageHeader
-        titulo="Dashboard"
+        titulo="Diagnóstico Logístico"
         subtitulo={
           empresaAtiva
             ? `Diagnóstico de ${empresaAtiva.nome_fantasia || empresaAtiva.razao_social}`
@@ -328,13 +369,13 @@ export default function Dashboard() {
                           <TableCell align="right">
                             <Chip
                               size="small"
-                              label={fmtNumero(r.frete_rs_kg, 4)}
+                              label={fmtNumero(r.frete_rs_kg, 2)}
                               color={r.meta_rs_kg ? (acima ? "warning" : "success") : "default"}
                               variant="outlined"
                             />
                           </TableCell>
                           <TableCell align="right">
-                            {r.meta_rs_kg ? fmtNumero(r.meta_rs_kg, 4) : "—"}
+                            {r.meta_rs_kg ? fmtNumero(r.meta_rs_kg, 2) : "—"}
                           </TableCell>
                           <TableCell align="right">{fmtPct(r.frete_pct)}</TableCell>
                         </TableRow>
@@ -366,25 +407,78 @@ export default function Dashboard() {
                     <Table size="small">
                       <TableHead>
                         <TableRow>
-                          <TableCell>#</TableCell>
-                          <TableCell>Transportadora</TableCell>
-                          <TableCell align="right">CT-es</TableCell>
-                          <TableCell align="right">R$/kg</TableCell>
-                          <TableCell align="right" sx={{ color: GD.blue }}>
-                            % de Frete
+                          <TableCell>
+                            <TableSortLabel
+                              active={ordenacaoRanking.campo === "nome"}
+                              direction={ordenacaoRanking.campo === "nome" ? ordenacaoRanking.direcao : "asc"}
+                              onClick={() => ordenarPorColuna("nome")}
+                            >
+                              Transportadora
+                            </TableSortLabel>
                           </TableCell>
-                          <TableCell align="right">Custo/entrega</TableCell>
-                          <TableCell align="right">Frete</TableCell>
-                          <TableCell align="right">Participação</TableCell>
+                          <TableCell align="right">
+                            <TableSortLabel
+                              active={ordenacaoRanking.campo === "qtd_ctes"}
+                              direction={ordenacaoRanking.campo === "qtd_ctes" ? ordenacaoRanking.direcao : "desc"}
+                              onClick={() => ordenarPorColuna("qtd_ctes")}
+                            >
+                              CTe
+                            </TableSortLabel>
+                          </TableCell>
+                          <TableCell align="right">
+                            <TableSortLabel
+                              active={ordenacaoRanking.campo === "frete_rs_kg"}
+                              direction={ordenacaoRanking.campo === "frete_rs_kg" ? ordenacaoRanking.direcao : "desc"}
+                              onClick={() => ordenarPorColuna("frete_rs_kg")}
+                            >
+                              R$/kg
+                            </TableSortLabel>
+                          </TableCell>
+                          <TableCell align="right" sx={{ color: GD.blue, whiteSpace: "nowrap" }}>
+                            <TableSortLabel
+                              active={ordenacaoRanking.campo === "frete_pct"}
+                              direction={ordenacaoRanking.campo === "frete_pct" ? ordenacaoRanking.direcao : "desc"}
+                              onClick={() => ordenarPorColuna("frete_pct")}
+                              sx={{ color: "inherit", "&.Mui-active": { color: GD.blue } }}
+                            >
+                              % de Frete
+                            </TableSortLabel>
+                          </TableCell>
+                          <TableCell align="right">
+                            <TableSortLabel
+                              active={ordenacaoRanking.campo === "custo_medio_entrega"}
+                              direction={ordenacaoRanking.campo === "custo_medio_entrega" ? ordenacaoRanking.direcao : "desc"}
+                              onClick={() => ordenarPorColuna("custo_medio_entrega")}
+                            >
+                              Custo/entrega
+                            </TableSortLabel>
+                          </TableCell>
+                          <TableCell align="right">
+                            <TableSortLabel
+                              active={ordenacaoRanking.campo === "frete_total"}
+                              direction={ordenacaoRanking.campo === "frete_total" ? ordenacaoRanking.direcao : "desc"}
+                              onClick={() => ordenarPorColuna("frete_total")}
+                            >
+                              Frete
+                            </TableSortLabel>
+                          </TableCell>
+                          <TableCell align="right">
+                            <TableSortLabel
+                              active={ordenacaoRanking.campo === "participacao_pct"}
+                              direction={ordenacaoRanking.campo === "participacao_pct" ? ordenacaoRanking.direcao : "desc"}
+                              onClick={() => ordenarPorColuna("participacao_pct")}
+                            >
+                              Participação
+                            </TableSortLabel>
+                          </TableCell>
                         </TableRow>
                       </TableHead>
                       <TableBody>
-                        {diag.transportadoras.map((t, i) => (
+                        {transportadorasOrdenadas.map((t, i) => (
                           <TableRow key={t.transportadora_id ?? i}>
-                            <TableCell>{i + 1}</TableCell>
                             <TableCell>{t.nome}</TableCell>
                             <TableCell align="right">{t.qtd_ctes}</TableCell>
-                            <TableCell align="right">{fmtNumero(t.frete_rs_kg, 4)}</TableCell>
+                            <TableCell align="right">{fmtNumero(t.frete_rs_kg, 2)}</TableCell>
                             <TableCell align="right" sx={{ color: GD.blue, fontWeight: 600 }}>
                               {fmtPct(t.frete_pct, 1)}
                             </TableCell>
@@ -395,7 +489,7 @@ export default function Dashboard() {
                         ))}
                         {!diag.transportadoras.length && (
                           <TableRow>
-                            <TableCell colSpan={8} align="center" sx={{ color: "text.secondary" }}>
+                            <TableCell colSpan={7} align="center" sx={{ color: "text.secondary" }}>
                               Sem dados de transportadoras.
                             </TableCell>
                           </TableRow>
@@ -502,12 +596,6 @@ export default function Dashboard() {
               <InfoOutlinedIcon sx={{ fontSize: 15, color: "text.disabled" }} />
               <Typography variant="caption" color="text.secondary">
                 Métricas calculadas sobre CT-es ativos — eventos de cancelamento excluídos.
-              </Typography>
-            </Stack>
-            <Stack direction="row" spacing={0.75} alignItems="center">
-              <InfoOutlinedIcon sx={{ fontSize: 15, color: "text.disabled" }} />
-              <Typography variant="caption" color="text.secondary">
-                O histórico de Frete Total (sparkline) requer no mínimo 6 meses de movimentação.
               </Typography>
             </Stack>
           </Stack>

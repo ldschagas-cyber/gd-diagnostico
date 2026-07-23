@@ -10,7 +10,7 @@ export const CORES_CLASSIFICACAO = {
   "Muito Crítico": "error",
   "Sem referência": "default",
   "Sem dados": "default",
-  // Vocabulário do Comparativo de Mercado / Matriz Benchmark (OD) — v6.9
+  // Vocabulário do Comparativo de Mercado / Matriz Benchmark — v6.9
   ABAIXO_P50: "success",
   ENTRE_P50_P75: "info",
   ACIMA_P75: "error",
@@ -47,3 +47,16 @@ export const fmtDesvio = (d) =>
     minimumFractionDigits: 1,
     maximumFractionDigits: 1,
   })}%`;
+
+// Fonte do dado (barra de legenda do módulo Benchmark Mercado) — distingue
+// referência de mercado externo, estatística interna (Radar de Custo/MBL)
+// e recomendações geradas por regra determinística. Complementa, sem
+// substituir, o vocabulário de classificação acima.
+export const FONTES = {
+  MERCADO: { rotulo: "Mercado externo", cor: "primary" },
+  INTERNO: { rotulo: "Histórico interno", cor: "secondary" },
+  REGRA: { rotulo: "Regra determinística", cor: "default" },
+};
+
+export const rotuloFonte = (f) => FONTES[f]?.rotulo || f;
+export const corFonte = (f) => FONTES[f]?.cor || "default";

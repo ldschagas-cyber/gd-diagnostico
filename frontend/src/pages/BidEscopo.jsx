@@ -117,7 +117,7 @@ export default function BidEscopo() {
                       <TableCell align="right">{e.qtd_embarques}</TableCell>
                       <TableCell align="right">{fmtNumero(e.peso_total, 0)}</TableCell>
                       <TableCell align="right">{fmtMoeda(e.valor_frete_total)}</TableCell>
-                      <TableCell align="right">{fmtNumero(e.frete_rs_kg, 4)}</TableCell>
+                      <TableCell align="right">{fmtNumero(e.frete_rs_kg, 2)}</TableCell>
                       <TableCell align="right">{fmtNumero(e.frete_pct, 1)}%</TableCell>
                       <TableCell>
                         <IconButton size="small" onClick={() => deletarItem(e.id)}>

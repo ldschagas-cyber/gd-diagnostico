@@ -190,7 +190,7 @@ class BenchmarkODUseCase:
         for (ho_cod, hd_cod), g in grupos.items():
             rs_kg = _div(g["frete"], g["peso"])
             pct = _div(g["frete"], g["merc"]) * 100.0
-            ref = self.corredor_repo.get_by_corredor(ho_cod, hd_cod)
+            ref = self.corredor_repo.get_by_corredor(empresa_id, ho_cod, hd_cod)
 
             item = BenchmarkCorredorItem(
                 hub_origem=ho_cod, hub_origem_nome=g["ho_nome"],

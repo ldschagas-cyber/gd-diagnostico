@@ -5,6 +5,7 @@ Regras RF008:
 - Ignorar CT-es sem vínculo com a empresa selecionada.
 - Evitar duplicidade pela chave do CT-e.
 """
+from datetime import date
 from typing import List, Tuple
 
 from app.application.dtos import ResultadoImportacao
@@ -50,20 +51,33 @@ class ImportarCTeUseCase:
                 "Empresa selecionada não possui CNPJ de matriz/filiais cadastrados."
             )
 
-        novos: List[CTe] = []
-        chaves_no_lote: set[str] = set()
-
+        # Parse de todos os arquivos primeiro, para poder checar duplicidade
+        # contra o banco com UMA única query (em vez de uma por arquivo).
+        parseados: list = []
         for nome, conteudo in arquivos:
             try:
                 parsed = parse_cte_xml(conteudo)
             except Exception as exc:  # noqa: BLE001
                 resultado.erros.append(f"{nome}: {exc}")
                 continue
-
             if not parsed.chave:
                 resultado.erros.append(f"{nome}: chave do CT-e não encontrada.")
                 continue
+            parseados.append(parsed)
 
+        chaves_existentes = self.cte_repo.get_chaves_existentes(
+            [p.chave for p in parseados]
+        )
+
+        # Cache de resolução de transportadora dentro do lote — evita repetir
+        # a query (ou o INSERT de auto-criação) para a mesma transportadora
+        # em cada arquivo do lote.
+        cache_transportadora: dict[str, int | None] = {}
+
+        novos: List[CTe] = []
+        chaves_no_lote: set[str] = set()
+
+        for parsed in parseados:
             # Regra: validar tomador contra matriz/filiais
             if parsed.tomador_cnpj not in cnpjs_empresa:
                 resultado.ignorados_sem_vinculo += 1
@@ -74,12 +88,12 @@ class ImportarCTeUseCase:
                 continue
 
             # Regra: evitar duplicidade (no lote e no banco)
-            if parsed.chave in chaves_no_lote or self.cte_repo.get_by_chave(parsed.chave):
+            if parsed.chave in chaves_no_lote or parsed.chave in chaves_existentes:
                 resultado.duplicados += 1
                 continue
 
-            transportadora_id = self._resolver_transportadora(
-                parsed.transportadora_cnpj, parsed.transportadora_nome, empresa_id
+            transportadora_id = self._resolver_transportadora_cacheado(
+                parsed, empresa_id, cache_transportadora
             )
 
             cte = CTe(
@@ -120,8 +134,10 @@ class ImportarCTeUseCase:
     def importar_excel(
         self, empresa_id: int, conteudo: bytes, atualizar_existentes: bool = False
     ) -> ResultadoImportacao:
-        linhas = parse_excel(conteudo)
-        resultado = ResultadoImportacao(total_processados=len(linhas))
+        linhas, sem_identificador = parse_excel(conteudo)
+        resultado = ResultadoImportacao(
+            total_processados=len(linhas), sem_identificador=sem_identificador
+        )
 
         novos: List[CTe] = []
         for i, linha in enumerate(linhas, start=2):  # linha 1 = cabeçalho
@@ -138,7 +154,19 @@ class ImportarCTeUseCase:
                     transportadora_id=transportadora_id,
                     chave="",  # definida abaixo (apenas no caminho de criação)
                     numero=numero_doc,
-                    data_emissao=linha.data_embarque or linha.data_saida,
+                    # Data Emissão é coluna obrigatória na planilha (fonte real
+                    # da competência do CT-e). O fallback para Data
+                    # Embarque/Saída/Entrega e, por fim, para a data da
+                    # importação só cobre planilhas antigas (pré-existentes)
+                    # que ainda não têm a coluna — evita CT-e com
+                    # data_emissao nula, que ficaria invisível em todo
+                    # indicador/filtro por período (base por competência,
+                    # Dashboard, DLG etc.).
+                    data_emissao=linha.data_emissao or linha.data_embarque
+                    or linha.data_saida or linha.data_entrega or date.today(),
+                    tomador_cnpj=linha.tomador_cnpj,
+                    destinatario_cnpj=linha.destinatario_cnpj,
+                    destinatario_nome=linha.destinatario_nome,
                     peso=linha.peso,
                     valor_frete=linha.valor_frete,
                     valor_mercadoria=linha.valor_mercadoria,
@@ -183,23 +211,53 @@ class ImportarCTeUseCase:
         if novos:
             resultado.importados = self.cte_repo.bulk_create(novos)
         logger.info(
-            "Importação Excel empresa=%s: %s importados, %s atualizados, %s erros",
-            empresa_id, resultado.importados, resultado.atualizados, len(resultado.erros),
+            "Importação Excel empresa=%s: %s importados, %s atualizados, "
+            "%s sem identificador (NF/CT-e em branco), %s erros",
+            empresa_id, resultado.importados, resultado.atualizados,
+            resultado.sem_identificador, len(resultado.erros),
         )
         return resultado
 
-    def _resolver_transportadora(self, cnpj: str, nome: str, empresa_id: int) -> int | None:
+    def _resolver_transportadora_cacheado(
+        self, parsed: "CTeParseResult", empresa_id: int, cache: dict[str, int | None]
+    ) -> int | None:
+        """Envolve `_resolver_transportadora` com um cache por lote.
+
+        Lotes grandes costumam repetir a mesma transportadora em muitos
+        arquivos; sem cache, cada arquivo dispararia uma query (e possível
+        INSERT de auto-criação) redundante para a mesma transportadora.
+        """
+        chave_cache = f"cnpj:{parsed.transportadora_cnpj}" if parsed.transportadora_cnpj \
+            else f"nome:{(parsed.transportadora_nome or '').strip().lower()}"
+        if chave_cache in cache:
+            return cache[chave_cache]
+        resultado = self._resolver_transportadora(parsed, empresa_id)
+        cache[chave_cache] = resultado
+        return resultado
+
+    def _resolver_transportadora(self, parsed: "CTeParseResult", empresa_id: int) -> int | None:
         """Resolve (ou auto-cria) transportadora no escopo da empresa.
 
         Busca primeiro por (CNPJ + empresa_id). Se não encontrar, cria nova
-        transportadora vinculada à empresa. Isso garante isolamento entre clientes.
+        transportadora já com o cadastro completo extraído do XML (razão
+        social, CNPJ, endereço, cidade, UF, CEP, telefone) — evolução v6.11.
+        Isso garante isolamento entre clientes.
         """
+        cnpj = parsed.transportadora_cnpj
+        nome = parsed.transportadora_nome
         if cnpj:
             t = self.transp_repo.get_by_cnpj_empresa(cnpj, empresa_id)
             if t:
                 return t.id
             criada = self.transp_repo.create(
-                Transportadora(empresa_id=empresa_id, razao_social=nome or cnpj, cnpj=cnpj)
+                Transportadora(
+                    empresa_id=empresa_id, razao_social=nome or cnpj, cnpj=cnpj,
+                    endereco=parsed.transportadora_endereco,
+                    cidade=parsed.transportadora_cidade,
+                    uf=parsed.transportadora_uf,
+                    cep=parsed.transportadora_cep,
+                    telefone=parsed.transportadora_telefone,
+                )
             )
             return criada.id
         return self._resolver_transportadora_por_nome(nome, empresa_id)

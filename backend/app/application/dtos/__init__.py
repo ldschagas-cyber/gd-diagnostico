@@ -25,6 +25,8 @@ class IndicadorNacional:
     ref_pct_ideal_max: Optional[float] = None
     ref_pct_mercado_min: Optional[float] = None
     ref_pct_mercado_max: Optional[float] = None
+    # ── Meta mensal de orçamento nacional (v6.12) — indicador "Evolução mensal de frete" ──
+    orcamento_mensal: Optional[float] = None
 
 
 @dataclass
@@ -38,6 +40,8 @@ class IndicadorRegional:
     meta_rs_kg: Optional[float] = None
     meta_pct: Optional[float] = None
     qtd_ctes: int = 0
+    orcamento_mensal: Optional[float] = None
+    orcamento_periodo: Optional[float] = None
 
 
 @dataclass
@@ -87,6 +91,7 @@ class ResultadoImportacao:
     ignorados_sem_vinculo: int = 0
     duplicados: int = 0
     atualizados: int = 0
+    sem_identificador: int = 0
     erros: List[str] = field(default_factory=list)
     total_processados: int = 0
 
@@ -109,6 +114,30 @@ class ResultadoCancelamento:
     nao_encontrados: int = 0
     erros: int = 0
     ocorrencias: List[OcorrenciaCancelamento] = field(default_factory=list)
+
+
+@dataclass
+class OcorrenciaCCe:
+    """Uma linha do log de registro de Carta de Correção (CCe, v6.11)."""
+    arquivo: str = ""
+    chave: str = ""
+    resultado: str = ""            # REGISTRADA | DUPLICADO | NAO_ENCONTRADO | ERRO
+    mensagem: str = ""
+
+
+@dataclass
+class ResultadoCCe:
+    """Resumo do registro de Cartas de Correção de CT-e (v6.11).
+
+    A CCe nunca é aplicada automaticamente ao CT-e — apenas registrada no log
+    de auditoria para revisão manual do analista (ver `CartaCorrecaoCteUseCase`).
+    """
+    total_processados: int = 0
+    registradas: int = 0
+    duplicados: int = 0
+    nao_encontrados: int = 0
+    erros: int = 0
+    ocorrencias: List[OcorrenciaCCe] = field(default_factory=list)
 
 
 # ===================== Módulo Benchmark Logístico =====================
@@ -271,4 +300,60 @@ class EconomiaCorredorItem:
     benchmark_medio: float = 0.0
     tem_referencia: bool = False
     economia: float = 0.0
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# SIMULADOR DE HUB DE ORIGEM
+# ═══════════════════════════════════════════════════════════════════════════
+
+@dataclass
+class SimulacaoHubRotaItem:
+    """Uma rota (hub atual → hub destino) real da empresa, comparada contra a
+    referência de mercado do MESMO destino partindo do hub alternativo."""
+    hub_destino: str = ""
+    hub_destino_nome: str = ""
+    # operação real da empresa hoje, no hub atual, para este destino
+    qtd_ctes: int = 0
+    peso_total: float = 0.0
+    frete_atual_total: float = 0.0
+    frete_atual_rs_kg: float = 0.0
+    # simulação: referência de mercado do hub alternativo aplicada ao MESMO
+    # peso real da empresa (não é dado observado — é estimativa de mercado)
+    tem_referencia_alt: bool = False   # False → sem referência cadastrada p/ este par; tela mostra CTA
+    frete_simulado_rs_kg: float = 0.0
+    frete_simulado_total: float = 0.0
+    delta_custo_pct: float = 0.0
+    # prazo: atual é observado (CT-e), simulado é referência de mercado (pode faltar)
+    prazo_atual_dias: Optional[float] = None
+    amostra_prazo_atual: int = 0
+    prazo_simulado_dias: Optional[float] = None
+    delta_prazo_dias: Optional[float] = None
+    # confiança: amostra real abaixo do threshold do MBL não deve embasar decisão
+    baixa_confianca: bool = False
+    # "manter_atual" | "avaliar_alternativo" | "dados_insuficientes"
+    recomendacao: str = "dados_insuficientes"
+
+
+@dataclass
+class SimulacaoHubResultado:
+    hub_atual: str = ""
+    hub_atual_nome: str = ""
+    hub_alt: str = ""
+    hub_alt_nome: str = ""
+    periodo_inicio: Optional[str] = None
+    periodo_fim: Optional[str] = None
+    opera_no_hub_atual: bool = False   # False → empresa não tem CT-e real partindo deste hub no período
+    rotas: List[SimulacaoHubRotaItem] = field(default_factory=list)
+    qtd_rotas: int = 0
+    rotas_com_referencia: int = 0
+    rotas_sem_referencia: int = 0
+    rotas_com_ganho: int = 0           # dentre as com referência: custo simulado < atual
+    rotas_com_perda: int = 0
+    frete_atual_total: float = 0.0             # soma de TODAS as rotas reais do hub atual
+    frete_comparavel_total: float = 0.0        # soma só das rotas COM referência (base do delta)
+    frete_simulado_total: float = 0.0          # soma simulada das rotas com referência
+    delta_custo_total_pct: float = 0.0         # sobre frete_comparavel_total, não frete_atual_total
+    prazo_atual_medio_dias: Optional[float] = None
+    prazo_simulado_medio_dias: Optional[float] = None
+    nota: str = ""
 

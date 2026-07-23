@@ -1,4 +1,11 @@
-"""Router de relatórios de diagnóstico (RF015) — exportação Excel e PDF."""
+"""Router de relatórios (RF015).
+
+Diagnóstico Logístico: HTML e Excel (sem PDF). Benchmark, Fechamento de
+Custo de Frete e BID Executivo: HTML, PDF e Excel. Todos reaproveitam
+sempre os mesmos dados das telas de origem, nunca recalculados em paralelo
+aqui. Os demais subtipos do BID (comparativo, ranking, economia,
+resultado), voltados ao trabalho interno, continuam em PDF e Excel.
+"""
 from datetime import date
 from typing import Optional
 
@@ -8,13 +15,21 @@ from sqlalchemy.orm import Session
 
 from app.application.use_cases.benchmark import BenchmarkUseCase
 from app.application.use_cases.diagnostico import DiagnosticoUseCase
+from app.application.use_cases.dlg import DlgUseCase
+from app.application.use_cases.fechamento_mensal import FechamentoMensalUseCase
 from app.core.database import get_db
+from app.infrastructure.database.repositories import RecomendacaoRepository
 from app.infrastructure.reports.benchmark_report import (
     gerar_benchmark_excel,
+    gerar_benchmark_html,
     gerar_benchmark_pdf,
 )
-from app.infrastructure.reports.excel_report import gerar_relatorio_excel
-from app.infrastructure.reports.pdf_report import gerar_relatorio_pdf
+from app.infrastructure.reports.fechamento_report import (
+    gerar_fechamento_excel,
+    gerar_fechamento_html,
+    gerar_fechamento_pdf,
+)
+from app.infrastructure.reports.html_report import gerar_relatorio_excel, gerar_relatorio_html
 from app.presentation.api.dependencies import (
     get_benchmark_repo,
     get_cte_repo,
@@ -38,8 +53,27 @@ def _gerar_diag(empresa_id, data_inicio, data_fim, cte_repo, empresa_repo,
         raise HTTPException(404, str(exc))
 
 
-@router.get("/diagnostico/{empresa_id}/excel")
-def relatorio_excel(
+def _gerar_dados_dlg_extra(empresa_id, data_inicio, data_fim, db: Session):
+    """Indicadores por dimensão (DLG consolidado), outliers e recomendações
+    já persistidas — reaproveitados como estão pelas telas Análise de
+    Eficiência e Recomendações, nunca recalculados em paralelo aqui."""
+    dlg_uc = DlgUseCase(db)
+    dlg_por_dimensao = {
+        dim: dlg_uc.listar(
+            empresa_id, dimensao=dim, modo="consolidado",
+            data_inicio=data_inicio, data_fim=data_fim,
+        )
+        for dim in ("CLIENTE_FINAL", "ROTA", "TRANSPORTADORA", "FILIAL")
+    }
+    outliers = dlg_uc.listar_outliers(
+        empresa_id, data_inicio=data_inicio, data_fim=data_fim
+    )
+    recomendacoes = RecomendacaoRepository(db).listar(empresa_id)
+    return dlg_por_dimensao, outliers, recomendacoes
+
+
+@router.get("/diagnostico/{empresa_id}/html")
+def relatorio_html(
     empresa_id: int,
     data_inicio: Optional[date] = Query(None),
     data_fim: Optional[date] = Query(None),
@@ -49,41 +83,56 @@ def relatorio_excel(
     transp_repo=Depends(get_transportadora_repo),
     meta_nac=Depends(get_meta_nacional_repo),
     meta_reg=Depends(get_meta_regional_repo),
+    db: Session = Depends(get_db),
+):
+    from datetime import datetime
+
+    diag = _gerar_diag(empresa_id, data_inicio, data_fim, cte_repo, empresa_repo,
+                       transp_repo, meta_nac, meta_reg)
+    dlg_por_dimensao, outliers, recomendacoes = _gerar_dados_dlg_extra(
+        empresa_id, data_inicio, data_fim, db
+    )
+
+    conteudo = gerar_relatorio_html(
+        diag, dlg_por_dimensao, outliers, recomendacoes,
+        gerado_em=datetime.now().strftime("%d/%m/%Y %H:%M"),
+    )
+    from io import BytesIO
+    return StreamingResponse(
+        BytesIO(conteudo),
+        media_type="text/html",
+        headers={
+            "Content-Disposition": f"attachment; filename=diagnostico_{empresa_id}.html"
+        },
+    )
+
+
+@router.get("/diagnostico/{empresa_id}/excel")
+def relatorio_diagnostico_excel(
+    empresa_id: int,
+    data_inicio: Optional[date] = Query(None),
+    data_fim: Optional[date] = Query(None),
+    _=Depends(verificar_acesso_empresa),
+    cte_repo=Depends(get_cte_repo),
+    empresa_repo=Depends(get_empresa_repo),
+    transp_repo=Depends(get_transportadora_repo),
+    meta_nac=Depends(get_meta_nacional_repo),
+    meta_reg=Depends(get_meta_regional_repo),
+    db: Session = Depends(get_db),
 ):
     diag = _gerar_diag(empresa_id, data_inicio, data_fim, cte_repo, empresa_repo,
                        transp_repo, meta_nac, meta_reg)
-    conteudo = gerar_relatorio_excel(diag)
+    dlg_por_dimensao, outliers, recomendacoes = _gerar_dados_dlg_extra(
+        empresa_id, data_inicio, data_fim, db
+    )
+
+    conteudo = gerar_relatorio_excel(diag, dlg_por_dimensao, outliers, recomendacoes)
     from io import BytesIO
     return StreamingResponse(
         BytesIO(conteudo),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={
             "Content-Disposition": f"attachment; filename=diagnostico_{empresa_id}.xlsx"
-        },
-    )
-
-
-@router.get("/diagnostico/{empresa_id}/pdf")
-def relatorio_pdf(
-    empresa_id: int,
-    data_inicio: Optional[date] = Query(None),
-    data_fim: Optional[date] = Query(None),
-    _=Depends(verificar_acesso_empresa),
-    cte_repo=Depends(get_cte_repo),
-    empresa_repo=Depends(get_empresa_repo),
-    transp_repo=Depends(get_transportadora_repo),
-    meta_nac=Depends(get_meta_nacional_repo),
-    meta_reg=Depends(get_meta_regional_repo),
-):
-    diag = _gerar_diag(empresa_id, data_inicio, data_fim, cte_repo, empresa_repo,
-                       transp_repo, meta_nac, meta_reg)
-    conteudo = gerar_relatorio_pdf(diag)
-    from io import BytesIO
-    return StreamingResponse(
-        BytesIO(conteudo),
-        media_type="application/pdf",
-        headers={
-            "Content-Disposition": f"attachment; filename=diagnostico_{empresa_id}.pdf"
         },
     )
 
@@ -107,8 +156,8 @@ def _dados_benchmark(uc, empresa_repo, empresa_id, data_inicio, data_fim):
     return nome, nacional, regional, transportadoras, economia
 
 
-@router.get("/benchmark/{empresa_id}/excel")
-def relatorio_benchmark_excel(
+@router.get("/benchmark/{empresa_id}/html")
+def relatorio_benchmark_html(
     empresa_id: int,
     data_inicio: Optional[date] = Query(None),
     data_fim: Optional[date] = Query(None),
@@ -121,16 +170,21 @@ def relatorio_benchmark_excel(
     bench_repo=Depends(get_benchmark_repo),
     db: Session = Depends(get_db),
 ):
+    from datetime import datetime
+
     uc = _benchmark_uc(cte_repo, empresa_repo, transp_repo, meta_nac, meta_reg, bench_repo, db)
     nome, nacional, regional, transps, economia = _dados_benchmark(
         uc, empresa_repo, empresa_id, data_inicio, data_fim
     )
-    conteudo = gerar_benchmark_excel(nome, nacional, regional, transps, economia)
+    conteudo = gerar_benchmark_html(
+        nome, nacional, regional, transps, economia,
+        gerado_em=datetime.now().strftime("%d/%m/%Y %H:%M"),
+    )
     from io import BytesIO
     return StreamingResponse(
         BytesIO(conteudo),
-        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f"attachment; filename=benchmark_{empresa_id}.xlsx"},
+        media_type="text/html",
+        headers={"Content-Disposition": f"attachment; filename=benchmark_{empresa_id}.html"},
     )
 
 
@@ -161,9 +215,88 @@ def relatorio_benchmark_pdf(
     )
 
 
+@router.get("/benchmark/{empresa_id}/excel")
+def relatorio_benchmark_excel(
+    empresa_id: int,
+    data_inicio: Optional[date] = Query(None),
+    data_fim: Optional[date] = Query(None),
+    _=Depends(verificar_acesso_empresa),
+    cte_repo=Depends(get_cte_repo),
+    empresa_repo=Depends(get_empresa_repo),
+    transp_repo=Depends(get_transportadora_repo),
+    meta_nac=Depends(get_meta_nacional_repo),
+    meta_reg=Depends(get_meta_regional_repo),
+    bench_repo=Depends(get_benchmark_repo),
+    db: Session = Depends(get_db),
+):
+    uc = _benchmark_uc(cte_repo, empresa_repo, transp_repo, meta_nac, meta_reg, bench_repo, db)
+    nome, nacional, regional, transps, economia = _dados_benchmark(
+        uc, empresa_repo, empresa_id, data_inicio, data_fim
+    )
+    conteudo = gerar_benchmark_excel(nome, nacional, regional, transps, economia)
+    from io import BytesIO
+    return StreamingResponse(
+        BytesIO(conteudo),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename=benchmark_{empresa_id}.xlsx"},
+    )
+
+
+# ==================== Relatório do Fechamento de Custo de Frete ====================
+@router.get("/fechamento/{empresa_id}/{formato}")
+def relatorio_fechamento(
+    empresa_id: int,
+    formato: str,
+    competencia: Optional[str] = Query(None),
+    _=Depends(verificar_acesso_empresa),
+    empresa_repo=Depends(get_empresa_repo),
+    db: Session = Depends(get_db),
+):
+    from datetime import datetime
+
+    if formato not in ("html", "pdf", "excel"):
+        raise HTTPException(400, "Formato inválido. Use: html, pdf, excel.")
+
+    hoje = date.today()
+    competencia = competencia or f"{hoje.year}-{hoje.month:02d}"
+
+    empresa = empresa_repo.get(empresa_id)
+    if not empresa:
+        raise HTTPException(404, "Empresa não encontrada.")
+    nome = empresa.nome_fantasia or empresa.razao_social
+
+    uc = FechamentoMensalUseCase(db)
+    atual = uc.obter(empresa_id, competencia)
+    historico = uc.historico(empresa_id, 13)
+
+    from io import BytesIO
+
+    if formato == "html":
+        conteudo = gerar_fechamento_html(
+            nome, atual, historico, gerado_em=datetime.now().strftime("%d/%m/%Y %H:%M")
+        )
+        return StreamingResponse(
+            BytesIO(conteudo), media_type="text/html",
+            headers={"Content-Disposition": f"attachment; filename=fechamento_{empresa_id}_{competencia}.html"},
+        )
+    if formato == "pdf":
+        conteudo = gerar_fechamento_pdf(nome, atual, historico)
+        return StreamingResponse(
+            BytesIO(conteudo), media_type="application/pdf",
+            headers={"Content-Disposition": f"attachment; filename=fechamento_{empresa_id}_{competencia}.pdf"},
+        )
+    conteudo = gerar_fechamento_excel(nome, atual, historico)
+    return StreamingResponse(
+        BytesIO(conteudo),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename=fechamento_{empresa_id}_{competencia}.xlsx"},
+    )
+
+
 # ════════ Relatórios do Módulo BID (V3.1) ════════
 from app.infrastructure.reports.bid_report import (
-    gerar_bid_excel, gerar_bid_pdf, gerar_pacote_cotacao_pdf,
+    gerar_bid_excel, gerar_bid_executivo_excel, gerar_bid_executivo_html,
+    gerar_bid_pdf, gerar_pacote_cotacao_pdf,
 )
 from app.presentation.api.dependencies import (
     get_bid_repo, get_bid_escopo_repo, get_bid_proposta_repo,
@@ -216,8 +349,20 @@ def relatorio_bid(
 
     if tipo not in ("executivo", "comparativo", "ranking", "economia", "resultado"):
         raise HTTPException(400, f"Tipo inválido: {tipo}. Use: executivo, comparativo, ranking, economia, resultado, pacote_cotacao")
-    if formato not in ("pdf", "excel"):
-        raise HTTPException(400, "Formato inválido. Use 'pdf' ou 'excel'.")
+
+    formatos_validos = ("pdf", "html", "excel") if tipo == "executivo" else ("pdf", "excel")
+    if formato not in formatos_validos:
+        raise HTTPException(400, f"Formato inválido para tipo '{tipo}'. Use: {', '.join(formatos_validos)}.")
+
+    if formato == "html":
+        from datetime import datetime
+        conteudo = gerar_bid_executivo_html(
+            empresa_nome, bid, dados, gerado_em=datetime.now().strftime("%d/%m/%Y %H:%M")
+        )
+        return StreamingResponse(
+            BytesIO(conteudo), media_type="text/html",
+            headers={"Content-Disposition": f"attachment; filename=bid_{bid_id}_executivo.html"},
+        )
 
     if formato == "pdf":
         conteudo = gerar_bid_pdf(tipo, empresa_nome, bid, dados)
@@ -226,7 +371,11 @@ def relatorio_bid(
             headers={"Content-Disposition": f"attachment; filename=bid_{bid_id}_{tipo}.pdf"},
         )
     else:
-        conteudo = gerar_bid_excel(tipo, empresa_nome, bid, dados)
+        conteudo = (
+            gerar_bid_executivo_excel(empresa_nome, bid, dados)
+            if tipo == "executivo"
+            else gerar_bid_excel(tipo, empresa_nome, bid, dados)
+        )
         return StreamingResponse(
             BytesIO(conteudo),
             media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",

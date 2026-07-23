@@ -36,7 +36,10 @@ def listar(user: User = Depends(get_current_superuser), repo=Depends(get_user_re
     todos = repo.list()
     if _eh_superuser_global(user):
         return todos
-    return [u for u in todos if u.empresa_id == user.empresa_id]
+    # ADMIN de empresa: só vê usuários com quem compartilha ao menos 1 empresa
+    # (login baseado em empresa, v6.14 — usuário pode estar em várias).
+    minhas = set(user.empresas_ids or [])
+    return [u for u in todos if set(u.empresas_ids or []) & minhas]
 
 
 @router.post("", response_model=UserOut, status_code=201)
@@ -50,17 +53,19 @@ def criar(
 
     is_superuser = payload.is_superuser
     empresa_id = payload.empresa_id
+    empresas_ids = payload.empresas_ids
     if not _eh_superuser_global(user):
-        # ADMIN de empresa: só cria usuários na própria empresa, nunca superusuário global.
+        # ADMIN de empresa: só cria usuários nas próprias empresas, nunca superusuário global.
         if is_superuser:
             raise HTTPException(403, "Você não tem permissão para criar um superusuário.")
-        empresa_id = user.empresa_id
+        empresas_ids = [e for e in empresas_ids if e in (user.empresas_ids or [])] or list(user.empresas_ids or [])
+        empresa_id = empresa_id if empresa_id in empresas_ids else (empresas_ids[0] if empresas_ids else None)
 
     novo = User(
         nome=payload.nome, email=payload.email,
         hashed_password=hash_password(payload.senha),
         is_active=payload.is_active, is_superuser=is_superuser,
-        empresa_id=empresa_id, role=payload.role,
+        empresa_id=empresa_id, empresas_ids=empresas_ids, role=payload.role,
     )
     return repo.create(novo)
 
@@ -73,8 +78,10 @@ def _usuario_alvo_ou_404(user_id: int, repo):
 
 
 def _garantir_acesso_ao_alvo(user: User, alvo: User) -> None:
-    """403 se um ADMIN de empresa tentar mexer em usuário de outra empresa."""
-    if not _eh_superuser_global(user) and alvo.empresa_id != user.empresa_id:
+    """403 se um ADMIN de empresa tentar mexer em usuário sem empresa em comum."""
+    if _eh_superuser_global(user):
+        return
+    if not (set(alvo.empresas_ids or []) & set(user.empresas_ids or [])):
         raise HTTPException(403, "Você não tem acesso a este usuário.")
 
 
@@ -101,6 +108,14 @@ def atualizar(
         existente.is_superuser = payload.is_superuser
     if payload.senha:
         existente.hashed_password = hash_password(payload.senha)
+    if payload.empresas_ids is not None:
+        novas_ids = payload.empresas_ids
+        if not _eh_superuser_global(user):
+            # ADMIN de empresa só pode vincular empresas às quais ele próprio pertence.
+            novas_ids = [e for e in novas_ids if e in (user.empresas_ids or [])]
+        existente.empresas_ids = novas_ids
+        if existente.empresa_id not in novas_ids:
+            existente.empresa_id = novas_ids[0] if novas_ids else None
     return repo.update(user_id, existente)
 
 

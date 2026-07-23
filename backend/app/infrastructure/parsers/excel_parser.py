@@ -1,14 +1,33 @@
 """Parser de importação via Excel (RF010) — alternativa quando não há XML.
 
-Campos mínimos (RF010): Nota Fiscal, Data Embarque, Data Saída, Data Entrega,
-Transportadora, Cidade Origem, Cidade Destino, Peso, Valor Mercadoria, Valor Frete.
+Campos mínimos (RF010): Nota Fiscal, Data Emissão, Transportadora, Cidade
+Origem, Cidade Destino, Peso, Valor Mercadoria, Valor Frete.
+
+Data Emissão é obrigatória (mesmo papel do ``dhEmi`` do XML): é a fonte da
+competência (mês/ano) usada em todo indicador e filtro por período — Base de
+CT-e por competência, Dashboard, DLG etc. Sem ela, o sistema não tem como
+saber a que mês o frete pertence (planilhas antigas confundiam isso com a
+data da importação, gerando competência incorreta).
 
 Campos opcionais (compatibilidade retroativa — planilhas sem estas colunas
 continuam funcionando normalmente):
+  - Data Embarque / Data Saída / Data Entrega: datas operacionais do
+    transporte (não são a data de emissão do CT-e).
   - CT-e: número do Conhecimento de Transporte.
+  - Destinatário / CNPJ Destinatário: identifica o cliente final da carga
+    (RN-67/RN-68 do DLG) — alimenta a dimensão CLIENTE_FINAL do diagnóstico
+    (Diagnóstico Logístico e Recomendações). Sem essas colunas, os CT-es da
+    planilha caem em "Cliente não identificado" (mesmo comportamento já
+    usado para XML sem destinatário reconhecido — nenhum CT-e é descartado).
   - Componentes do frete: Frete Peso, Frete Valor, Pedágio, GRIS, Seguro,
     Ademe, Despacho, Outros (alimentam a composição usada na análise de
     divergência por componente, igual ao caminho de XML).
+  - Tomador / CNPJ Tomador / Filial: CNPJ da matriz/filial responsável pelo
+    frete — alimenta a dimensão FILIAL do DLG (mesmo papel do tomador do
+    XML). Aceita só os dígitos ou um texto com o CNPJ embutido (ex.:
+    "03822909000113 - Razão Social"), já que só os dígitos são extraídos
+    (``_so_digitos``). Sem essa coluna, os CT-es caem em "Filial não
+    identificada".
 """
 from datetime import date, datetime
 from typing import List, Optional
@@ -31,10 +50,31 @@ COLUNAS = {
     "n cte": "cte",
     "conhecimento": "cte",
     "conhecimento de transporte": "cte",
+    "data emissao": "data_emissao",
+    "data emissão": "data_emissao",
+    "data de emissao": "data_emissao",
+    "data de emissão": "data_emissao",
+    "emissao": "data_emissao",
+    "emissão": "data_emissao",
     "data embarque": "data_embarque",
     "data saida": "data_saida",
     "data saída": "data_saida",
     "data entrega": "data_entrega",
+    "destinatario": "destinatario_nome",
+    "destinatário": "destinatario_nome",
+    "cliente": "destinatario_nome",
+    "cliente destinatario": "destinatario_nome",
+    "cliente destinatário": "destinatario_nome",
+    "destinatario cnpj": "destinatario_cnpj",
+    "destinatário cnpj": "destinatario_cnpj",
+    "cnpj destinatario": "destinatario_cnpj",
+    "cnpj destinatário": "destinatario_cnpj",
+    "cnpj cliente": "destinatario_cnpj",
+    "tomador": "tomador_cnpj",
+    "cnpj tomador": "tomador_cnpj",
+    "tomador cnpj": "tomador_cnpj",
+    "cnpj do tomador": "tomador_cnpj",
+    "filial": "tomador_cnpj",
     "transportadora": "transportadora",
     "cidade origem": "cidade_origem",
     "cidade destino": "cidade_destino",
@@ -75,18 +115,31 @@ COMPONENTES = {
 }
 
 OBRIGATORIAS = {
-    "nota_fiscal", "transportadora", "cidade_origem",
+    "nota_fiscal", "data_emissao", "transportadora", "cidade_origem",
     "cidade_destino", "peso", "valor_mercadoria", "valor_frete",
 }
 
 
 class LinhaExcel:
     def __init__(self, dados: dict, componentes: Optional[dict] = None):
-        self.nota_fiscal: str = str(dados.get("nota_fiscal", "")).strip()
-        self.cte: str = str(dados.get("cte", "")).strip()
+        # Célula vazia no Excel vira None (não ""): usar `or ""` evita que
+        # str(None) vire a string literal "None" no campo.
+        self.nota_fiscal: str = str(dados.get("nota_fiscal") or "").strip()
+        self.cte: str = str(dados.get("cte") or "").strip()
+        self.data_emissao: Optional[date] = _to_date(dados.get("data_emissao"))
         self.data_embarque: Optional[date] = _to_date(dados.get("data_embarque"))
         self.data_saida: Optional[date] = _to_date(dados.get("data_saida"))
         self.data_entrega: Optional[date] = _to_date(dados.get("data_entrega"))
+        # Destinatário (cliente final) — dimensão CLIENTE_FINAL do DLG (RN-67/68).
+        # Ambos opcionais: sem nenhum dos dois, o CT-e cai em "Cliente não
+        # identificado" (mesmo tratamento já dado ao XML sem <dest>).
+        self.destinatario_nome: str = str(dados.get("destinatario_nome", "")).strip()
+        self.destinatario_cnpj: str = _so_digitos(dados.get("destinatario_cnpj"))
+        # Tomador (opcional) — CNPJ da matriz/filial responsável pelo frete
+        # (RN v6.15). Alimenta a dimensão FILIAL do DLG, igual ao XML. Sem
+        # essa coluna, o CT-e cai em "Filial não identificada" (mesmo
+        # tratamento já dado ao Destinatário ausente).
+        self.tomador_cnpj: str = _so_digitos(dados.get("tomador_cnpj"))
         self.transportadora: str = str(dados.get("transportadora", "")).strip()
         self.cidade_origem: str = str(dados.get("cidade_origem", "")).strip()
         self.cidade_destino: str = str(dados.get("cidade_destino", "")).strip()
@@ -114,7 +167,7 @@ def _normalizar(texto: str) -> str:
     return s.strip().lower()
 
 
-def parse_excel(file_bytes: bytes) -> List[LinhaExcel]:
+def parse_excel(file_bytes: bytes) -> tuple[List[LinhaExcel], int]:
     from io import BytesIO
 
     wb = load_workbook(BytesIO(file_bytes), read_only=True, data_only=True)
@@ -146,6 +199,7 @@ def parse_excel(file_bytes: bytes) -> List[LinhaExcel]:
         )
 
     linhas: List[LinhaExcel] = []
+    sem_identificador = 0
     for row in rows:
         if row is None or all(c is None for c in row):
             continue
@@ -154,7 +208,13 @@ def parse_excel(file_bytes: bytes) -> List[LinhaExcel]:
             for idx, campo in indice_para_campo.items()
             if idx < len(row)
         }
-        if not str(dados.get("nota_fiscal", "")).strip():
+        # Nota Fiscal e CT-e são identificadores alternativos: a linha só é
+        # descartada quando NENHum dos dois está preenchido (ex.: planilha
+        # que só informa o número do CT-e, sem coluna de NF).
+        tem_nf = bool(str(dados.get("nota_fiscal") or "").strip())
+        tem_cte = bool(str(dados.get("cte") or "").strip())
+        if not tem_nf and not tem_cte:
+            sem_identificador += 1
             continue
         componentes = {
             categoria: row[idx]
@@ -164,7 +224,15 @@ def parse_excel(file_bytes: bytes) -> List[LinhaExcel]:
         linhas.append(LinhaExcel(dados, componentes))
 
     wb.close()
-    return linhas
+    return linhas, sem_identificador
+
+
+def _so_digitos(valor) -> str:
+    # Excel pode devolver CNPJ como número (célula não formatada como texto);
+    # nesse caso str(float) traria ".0" no final — normaliza para int antes.
+    if isinstance(valor, float) and valor.is_integer():
+        valor = int(valor)
+    return "".join(c for c in str(valor or "") if c.isdigit())
 
 
 def _to_float(valor) -> float:
@@ -207,10 +275,14 @@ def _to_date(valor) -> Optional[date]:
 MODELO_COLUNAS = [
     ("Nota Fiscal", "12345", True),
     ("CT-e", "CTE-0001", False),
+    ("Data Emissao", "01/03/2025", True),
     ("Data Embarque", "01/03/2025", False),
     ("Data Saida", "01/03/2025", False),
     ("Data Entrega", "05/03/2025", False),
     ("Transportadora", "Transportadora Exemplo Ltda", True),
+    ("Destinatario", "Cliente Exemplo Ltda", False),
+    ("Destinatario CNPJ", "12345678000199", False),
+    ("CNPJ Tomador", "12345678000100", False),
     ("Cidade Origem", "Sao Paulo", True),
     ("UF Origem", "SP", False),
     ("Cidade Destino", "Rio de Janeiro", True),
@@ -258,15 +330,32 @@ def gerar_modelo_excel() -> bytes:
 
     inst = wb.create_sheet("Instruções")
     linhas = [
-        ("Modelo de importação — GD Frete Diagnóstico", True),
+        ("Modelo de importação — GD Diagnóstico Logístico", True),
         ("", False),
         ("Colunas em branco (cabeçalho azul/branco) são OBRIGATÓRIAS:", True),
-        ("Nota Fiscal, Transportadora, Cidade Origem, Cidade Destino,", False),
-        ("Peso, Valor Mercadoria, Valor Frete.", False),
+        ("Nota Fiscal, Data Emissao, Transportadora, Cidade Origem,", False),
+        ("Cidade Destino, Peso, Valor Mercadoria, Valor Frete.", False),
+        ("", False),
+        ("Data Emissao é a data de emissão do CT-e (mês/ano usado em todo", True),
+        ("indicador e filtro por período) — não confundir com Data Embarque,", False),
+        ("Data Saida ou Data Entrega, que são datas operacionais opcionais.", False),
         ("", False),
         ("Colunas em destaque dourado são OPCIONAIS:", True),
-        ("CT-e, datas, UFs e os componentes de frete (Frete Peso,", False),
-        ("Frete Valor, Pedágio, GRIS, Seguro, Ademe, Despacho, Outros).", False),
+        ("CT-e, Data Embarque/Saida/Entrega, Destinatario, Destinatario CNPJ,", False),
+        ("CNPJ Tomador, UFs e os componentes de frete (Frete Peso, Frete Valor,", False),
+        ("Pedágio, GRIS, Seguro, Ademe, Despacho, Outros).", False),
+        ("", False),
+        ("Destinatario / Destinatario CNPJ identificam o cliente final da carga", True),
+        ("e alimentam a dimensão Cliente do Diagnóstico e das Recomendações.", False),
+        ("Sem preencher, o CT-e entra como \"Cliente não identificado\".", False),
+        ("", False),
+        ("CNPJ Tomador (ou apenas \"Tomador\"/\"Filial\") identifica a matriz/filial", True),
+        ("responsável pelo frete e alimenta a dimensão Filial do Diagnóstico.", False),
+        ("Aceita só os números do CNPJ ou um texto com o CNPJ embutido", False),
+        ("(ex: \"03822909000113 - Razão Social\") — os dígitos são extraídos", False),
+        ("automaticamente. Deve ser o CNPJ de uma filial (ou da matriz) já", False),
+        ("cadastrada em Empresas e Filiais. Sem preencher, o CT-e entra como", False),
+        ("\"Filial não identificada\".", False),
         ("", False),
         ("Observações:", True),
         ("- A ordem das colunas é livre; os nomes (com ou sem acento) são reconhecidos.", False),

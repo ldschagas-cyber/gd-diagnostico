@@ -372,6 +372,26 @@ def test_relatorio_bid_excel(client, auth, empresa_id, bid_id):
     assert len(r.content) > 500
 
 
+def test_relatorio_bid_executivo_html(client, auth, empresa_id, bid_id):
+    r = client.get(
+        f"/api/v1/relatorios/bid/{bid_id}/executivo/html",
+        headers=auth,
+        params={"empresa_id": empresa_id},
+    )
+    assert r.status_code == 200
+    assert r.content[:15] == b"<!DOCTYPE html>"
+
+
+def test_relatorio_bid_executivo_excel(client, auth, empresa_id, bid_id):
+    r = client.get(
+        f"/api/v1/relatorios/bid/{bid_id}/executivo/excel",
+        headers=auth,
+        params={"empresa_id": empresa_id},
+    )
+    assert r.status_code == 200
+    assert len(r.content) > 500
+
+
 def test_pacote_cotacao_pdf(client, auth, empresa_id, bid_id):
     r = client.get(
         f"/api/v1/relatorios/bid/{bid_id}/pacote_cotacao/pdf",

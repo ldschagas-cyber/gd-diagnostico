@@ -97,6 +97,16 @@ def get_benchmark_od_uc(db: Session = Depends(get_db)):
     )
 
 
+def get_simulador_hub_uc(db: Session = Depends(get_db)):
+    from app.application.use_cases.simulador_hub import SimuladorHubUseCase
+    return SimuladorHubUseCase(
+        CTeRepository(db),
+        ClusterClienteRepository(db),
+        BenchmarkCorredorRepository(db),
+        HubLogisticoRepository(db),
+    )
+
+
 # ---- Usuário atual (JWT: cookie httpOnly do navegador OU header Bearer) ----
 def get_current_user(
     request: Request,
@@ -164,13 +174,15 @@ def _usuario_pode_acessar_empresa(user: User, empresa_id: int) -> bool:
     """Regra de acesso multi-tenant.
 
     - Superusuário / admin global (sem empresa_id): acessa qualquer empresa.
-    - Usuário comum: só acessa a própria empresa (user.empresa_id).
+    - Usuário comum: acessa qualquer empresa a que esteja vinculado
+      (login baseado em empresa, v6.14) — checagem contra `empresas_ids`
+      (tabela usuario_empresas), não mais contra um único `empresa_id`.
     """
     role = getattr(user, "role", None)
     eh_admin = user.is_superuser or (getattr(role, "value", role) == "ADMIN")
     if eh_admin and user.empresa_id is None:
         return True
-    return user.empresa_id is not None and user.empresa_id == empresa_id
+    return empresa_id in (getattr(user, "empresas_ids", None) or [])
 
 
 def verificar_acesso_empresa(

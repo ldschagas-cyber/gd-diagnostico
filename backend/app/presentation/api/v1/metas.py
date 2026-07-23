@@ -1,16 +1,18 @@
-"""Router de metas nacionais e regionais (RF007).
+"""Router de metas nacionais e regionais (RF007), por empresa-cliente.
 
-Leitura liberada a qualquer usuário autenticado; edição restrita a
-administradores — são metas globais da plataforma, não por empresa-cliente.
+Leitura e edição restritas a usuários vinculados à empresa (papel ADMIN ou
+ANALISTA para escrita; VISUALIZADOR só lê) ou superusuário da plataforma —
+mesmo padrão de acesso usado no mapeamento de Hubs (clusters_router).
 """
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 
 from app.domain.entities import MetaNacional, MetaRegional
 from app.presentation.api.dependencies import (
-    get_current_superuser,
-    get_current_user,
+    bloquear_visualizador,
+    get_empresa_repo,
     get_meta_nacional_repo,
     get_meta_regional_repo,
+    verificar_acesso_empresa,
 )
 from app.presentation.schemas import (
     MetaNacionalIn,
@@ -19,28 +21,50 @@ from app.presentation.schemas import (
     MetaRegionalOut,
 )
 
-router = APIRouter(prefix="/metas", tags=["Metas"])
+router = APIRouter(prefix="/empresas/{empresa_id}/metas", tags=["Metas"])
 
 
 @router.get("/nacional", response_model=MetaNacionalOut | None)
-def obter_meta_nacional(_=Depends(get_current_user), repo=Depends(get_meta_nacional_repo)):
-    return repo.get()
+def obter_meta_nacional(
+    empresa_id: int,
+    _=Depends(verificar_acesso_empresa),
+    repo=Depends(get_meta_nacional_repo),
+):
+    return repo.get(empresa_id)
 
 
 @router.put("/nacional", response_model=MetaNacionalOut)
 def definir_meta_nacional(
-    payload: MetaNacionalIn, _=Depends(get_current_superuser), repo=Depends(get_meta_nacional_repo),
+    empresa_id: int,
+    payload: MetaNacionalIn,
+    _ac=Depends(verificar_acesso_empresa),
+    _=Depends(bloquear_visualizador),
+    repo=Depends(get_meta_nacional_repo),
+    empresa_repo=Depends(get_empresa_repo),
 ):
-    return repo.upsert(MetaNacional(**payload.model_dump()))
+    if not empresa_repo.get(empresa_id):
+        raise HTTPException(404, "Empresa não encontrada.")
+    return repo.upsert(MetaNacional(empresa_id=empresa_id, **payload.model_dump()))
 
 
 @router.get("/regionais", response_model=list[MetaRegionalOut])
-def listar_metas_regionais(_=Depends(get_current_user), repo=Depends(get_meta_regional_repo)):
-    return repo.list()
+def listar_metas_regionais(
+    empresa_id: int,
+    _=Depends(verificar_acesso_empresa),
+    repo=Depends(get_meta_regional_repo),
+):
+    return repo.list(empresa_id)
 
 
 @router.put("/regionais", response_model=MetaRegionalOut)
 def definir_meta_regional(
-    payload: MetaRegionalIn, _=Depends(get_current_superuser), repo=Depends(get_meta_regional_repo),
+    empresa_id: int,
+    payload: MetaRegionalIn,
+    _ac=Depends(verificar_acesso_empresa),
+    _=Depends(bloquear_visualizador),
+    repo=Depends(get_meta_regional_repo),
+    empresa_repo=Depends(get_empresa_repo),
 ):
-    return repo.upsert(MetaRegional(**payload.model_dump()))
+    if not empresa_repo.get(empresa_id):
+        raise HTTPException(404, "Empresa não encontrada.")
+    return repo.upsert(MetaRegional(empresa_id=empresa_id, **payload.model_dump()))
