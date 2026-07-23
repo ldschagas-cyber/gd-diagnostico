@@ -61,7 +61,7 @@ services:
     build:
       context: ./frontend
       args:
-        VITE_API_URL: /api   # proxy reverso: /api → backend:8000/api
+        VITE_API_URL: /api/v1   # proxy reverso: /api/v1 → backend:8000/api/v1
     container_name: gd_frete_frontend
     restart: always
     ports:
