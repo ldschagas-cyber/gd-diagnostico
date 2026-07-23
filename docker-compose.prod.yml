@@ -66,7 +66,9 @@ services:
     restart: always
     ports:
       - "80:80"
-      - "443:443"           # Nginx interno (TLS termina no Nginx externo ou aqui)
+      - "443:443"           # TLS termina aqui, com certificado Let's Encrypt
+    volumes:
+      - /etc/letsencrypt:/etc/letsencrypt:ro
     depends_on:
       - backend
     networks:
