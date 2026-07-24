@@ -205,7 +205,7 @@ export default function FechamentoFrete() {
   if (!empresaAtivaId) {
     return (
       <Box>
-        <PageHeader titulo="Fechamento de Custo de Frete" subtitulo="Faturamento por região, devoluções e frete complementar do mês" />
+        <PageHeader titulo="Fechamento de Frete" subtitulo="Faturamento por região, devoluções e frete complementar do mês" />
         <VazioEstado mensagem="Selecione uma empresa" />
       </Box>
     );
@@ -221,7 +221,7 @@ export default function FechamentoFrete() {
   return (
     <Box>
       <PageHeader
-        titulo="Fechamento de Custo de Frete"
+        titulo="Fechamento de Frete"
         subtitulo="Faturamento por região, devoluções e frete complementar do mês — frete realizado e budget são automáticos"
         acoes={
           <TextField select size="small" label="Competência" value={competencia} onChange={(e) => setCompetencia(e.target.value)} sx={{ width: 200 }}>

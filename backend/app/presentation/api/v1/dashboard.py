@@ -6,13 +6,13 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app.application.use_cases.diagnostico import DiagnosticoUseCase
 from app.presentation.api.dependencies import (
-    get_benchmark_repo,
     get_cte_repo,
     get_current_user,
     verificar_acesso_empresa,
     get_empresa_repo,
     get_meta_nacional_repo,
     get_meta_regional_repo,
+    get_referencia_mercado_pct_repo,
     get_transportadora_repo,
 )
 from app.presentation.schemas import DiagnosticoOut
@@ -37,7 +37,7 @@ def diagnostico(
     transp_repo=Depends(get_transportadora_repo),
     meta_nac=Depends(get_meta_nacional_repo),
     meta_reg=Depends(get_meta_regional_repo),
-    benchmark_repo=Depends(get_benchmark_repo),
+    benchmark_repo=Depends(get_referencia_mercado_pct_repo),
 ):
     uc = _build_uc(cte_repo, empresa_repo, transp_repo, meta_nac, meta_reg, benchmark_repo)
     try:

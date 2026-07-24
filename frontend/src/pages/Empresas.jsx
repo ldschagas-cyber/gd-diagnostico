@@ -393,7 +393,7 @@ export default function Empresas() {
   return (
     <Box>
       <PageHeader
-        titulo="Empresas e Filiais"
+        titulo="Empresas"
         subtitulo="Cadastre empresas e filiais — busca automática via CNPJ (Receita Federal)"
         acoes={
           <Button variant="contained" startIcon={<AddIcon />}

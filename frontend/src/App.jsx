@@ -15,7 +15,6 @@ import Regioes from "./pages/Regioes";
 import Cidades from "./pages/Cidades";
 import Metas from "./pages/Metas";
 import FechamentoFrete from "./pages/FechamentoFrete";
-import ParametrosMercado from "./pages/ParametrosMercado";
 import Importacao from "./pages/Importacao";
 import Relatorios from "./pages/Relatorios";
 import Usuarios from "./pages/Usuarios";
@@ -152,15 +151,9 @@ export default function App() {
                 <Route path="/cidades" element={<Cidades />} />
                 <Route path="/metas" element={<Metas />} />
                 <Route path="/fechamento-frete" element={<FechamentoFrete />} />
-                <Route
-                  path="/configuracoes/parametros-mercado"
-                  element={
-                    <ProtectedRoute soAdmin>
-                      <ParametrosMercado />
-                    </ProtectedRoute>
-                  }
-                />
-                <Route path="/configuracoes/benchmark-pct" element={<Navigate to="/configuracoes/parametros-mercado" replace />} />
+                {/* Referência de Frete aposentada — % Frete migrou para a Matriz Mercado (por corredor) */}
+                <Route path="/configuracoes/parametros-mercado" element={<Navigate to="/inteligencia-mercado/matriz-od" replace />} />
+                <Route path="/configuracoes/benchmark-pct" element={<Navigate to="/inteligencia-mercado/matriz-od" replace />} />
                 <Route path="/configuracoes/hubs-logisticos" element={<HubsLogisticos />} />
                 <Route
                   path="/usuarios"

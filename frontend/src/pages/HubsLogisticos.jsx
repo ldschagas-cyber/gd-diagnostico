@@ -698,7 +698,7 @@ export default function HubsLogisticos() {
       <Card>
         <Tabs value={aba} onChange={(_, v) => setAba(v)} sx={{ px: 2, borderBottom: 1, borderColor: "divider" }}>
           <Tab label="Hubs" />
-          <Tab label="Mapeamento Hubs" />
+          <Tab label="Mapeamentos de Hubs" />
           <Tab label="Parâmetros de Hubs" />
         </Tabs>
         <CardContent>

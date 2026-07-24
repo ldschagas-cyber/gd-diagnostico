@@ -46,6 +46,8 @@ def _merc_dict(m) -> dict:
         "faixa_peso_min": m.faixa_peso_min, "faixa_peso_max": m.faixa_peso_max,
         "rs_kg_p10": m.rs_kg_p10, "rs_kg_p25": m.rs_kg_p25, "rs_kg_p50": m.rs_kg_p50,
         "rs_kg_p75": m.rs_kg_p75, "rs_kg_p90": m.rs_kg_p90, "fonte": m.fonte,
+        "frete_pct_min": m.frete_pct_min, "frete_pct_medio": m.frete_pct_medio,
+        "frete_pct_max": m.frete_pct_max,
         "amostra_tamanho": m.amostra_tamanho, "metodologia": m.metodologia,
         "data_pesquisa": m.data_pesquisa.isoformat() if m.data_pesquisa else None,
     }
@@ -125,6 +127,9 @@ class BenchmarkMercadoIn(BaseModel):
     rs_kg_p50: float = Field(0.0, ge=0)
     rs_kg_p75: float = Field(0.0, ge=0)
     rs_kg_p90: float = Field(0.0, ge=0)
+    frete_pct_min: float = Field(0.0, ge=0)
+    frete_pct_medio: float = Field(0.0, ge=0)
+    frete_pct_max: float = Field(0.0, ge=0)
     amostra_tamanho: Optional[int] = Field(None, ge=0)
     metodologia: str = ""
     data_pesquisa: Optional[date] = None
@@ -168,6 +173,9 @@ def upsert_mercado(
     m.rs_kg_p50 = payload.rs_kg_p50
     m.rs_kg_p75 = payload.rs_kg_p75
     m.rs_kg_p90 = payload.rs_kg_p90
+    m.frete_pct_min = payload.frete_pct_min
+    m.frete_pct_medio = payload.frete_pct_medio
+    m.frete_pct_max = payload.frete_pct_max
     m.fonte = "MERCADO"
     m.amostra_tamanho = payload.amostra_tamanho
     m.metodologia = (payload.metodologia or "").strip()
@@ -193,9 +201,10 @@ def deletar_mercado(
 @router.get("/mercado/modelo")
 def baixar_modelo_mercado(_=Depends(get_current_superuser)):
     """Baixa a planilha-modelo (.xlsx) para importação em massa da Matriz
-    Benchmark. Colunas: origem_regiao, destino_regiao, modal (opcional),
+    Mercado. Colunas: origem_regiao, destino_regiao, modal (opcional),
     tipo_operacao, setor, faixa_peso_min, faixa_peso_max, rs_kg_p10..rs_kg_p90,
-    amostra_tamanho, metodologia, data_pesquisa (proveniência da pesquisa)."""
+    frete_pct_min/medio/max, amostra_tamanho, metodologia, data_pesquisa
+    (proveniência da pesquisa)."""
     import openpyxl
     from io import BytesIO
     from fastapi.responses import StreamingResponse
@@ -203,11 +212,12 @@ def baixar_modelo_mercado(_=Depends(get_current_superuser)):
 
     wb = openpyxl.Workbook()
     ws = wb.active
-    ws.title = "Matriz Benchmark"
+    ws.title = "Matriz Mercado"
     colunas = [
         "origem_regiao", "destino_regiao", "modal", "tipo_operacao", "setor",
         "faixa_peso_min", "faixa_peso_max",
         "rs_kg_p10", "rs_kg_p25", "rs_kg_p50", "rs_kg_p75", "rs_kg_p90",
+        "frete_pct_min", "frete_pct_medio", "frete_pct_max",
         "amostra_tamanho", "metodologia", "data_pesquisa",
     ]
     ws.append(colunas)
@@ -215,12 +225,12 @@ def baixar_modelo_mercado(_=Depends(get_current_superuser)):
     for c in ws[1]:
         c.font = Font(bold=True, color="FFFFFF")
         c.fill = azul
-    ws.append(["SUDESTE", "SUDESTE", "", "TODOS", "TODOS", 0, 0, 3.2, 3.6, 4.1, 4.7, 5.3, "", "", ""])
-    ws.append(["SUDESTE", "NORDESTE", "", "FTL", "TODOS", 0, 500, 4.0, 4.4, 5.0, 5.6, 6.2, "", "", ""])
+    ws.append(["SUDESTE", "SUDESTE", "", "TODOS", "TODOS", 0, 0, 3.2, 3.6, 4.1, 4.7, 5.3, 1.2, 1.7, 2.3, "", "", ""])
+    ws.append(["SUDESTE", "NORDESTE", "", "FTL", "TODOS", 0, 500, 4.0, 4.4, 5.0, 5.6, 6.2, 1.8, 2.6, 3.4, "", "", ""])
     ws.append(["SUDESTE", "NORDESTE", "", "FRACIONADO", "Farmacêutico", 0, 500, 9.1, 10.35, 12.4, 15.9, 19.7,
-               14, "Cotação direta com 6 transportadoras especializadas em carga fria", "2026-06-02"])
-    for col_letra, largura in zip("ABCDEFGHIJKLMNO",
-                                   [14, 14, 10, 14, 16, 14, 14, 10, 10, 10, 10, 10, 12, 40, 14]):
+               2.5, 3.4, 4.6, 14, "Cotação direta com 6 transportadoras especializadas em carga fria", "2026-06-02"])
+    for col_letra, largura in zip("ABCDEFGHIJKLMNOPQR",
+                                   [14, 14, 10, 14, 16, 14, 14, 10, 10, 10, 10, 10, 12, 12, 12, 12, 40, 14]):
         ws.column_dimensions[col_letra].width = largura
 
     inst = wb.create_sheet("Instruções")
@@ -234,6 +244,7 @@ def baixar_modelo_mercado(_=Depends(get_current_superuser)):
         ["setor", "Setor econômico pesquisado, ex.: Indústria, Varejo, Farmacêutico (opcional, padrão TODOS = referência genérica)."],
         ["faixa_peso_min / faixa_peso_max", "Faixa de peso em kg (opcional). 0/0 = sem faixa."],
         ["rs_kg_p10 .. rs_kg_p90", "Percentis de R$/kg de mercado para o par (obrigatório ao menos o P50)."],
+        ["frete_pct_min / frete_pct_medio / frete_pct_max", "Faixa de % Frete/Mercadoria de mercado para o par (opcional)."],
         ["amostra_tamanho", "Nº de cotações/pontos de dado que sustentam a linha (opcional, recomendado)."],
         ["metodologia", "Como o dado foi coletado, texto curto (opcional, recomendado)."],
         ["data_pesquisa", "Data da coleta no formato AAAA-MM-DD (opcional, recomendado)."],
@@ -252,7 +263,7 @@ def baixar_modelo_mercado(_=Depends(get_current_superuser)):
     return StreamingResponse(
         buf,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": "attachment; filename=modelo_matriz_benchmark.xlsx"},
+        headers={"Content-Disposition": "attachment; filename=modelo_matriz_mercado.xlsx"},
     )
 
 
@@ -363,6 +374,9 @@ async def importar_mercado_excel(
         m.rs_kg_p50 = p50
         m.rs_kg_p75 = _num(row, "rs_kg_p75")
         m.rs_kg_p90 = _num(row, "rs_kg_p90")
+        m.frete_pct_min = _num(row, "frete_pct_min")
+        m.frete_pct_medio = _num(row, "frete_pct_medio")
+        m.frete_pct_max = _num(row, "frete_pct_max")
         m.fonte = "MERCADO"
         m.amostra_tamanho = _inteiro(row, "amostra_tamanho")
         m.metodologia = (str(row[col["metodologia"]] or "").strip() if "metodologia" in col else "")

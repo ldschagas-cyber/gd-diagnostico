@@ -22,7 +22,6 @@ import ReceiptLongIcon     from "@mui/icons-material/ReceiptLong";
 import UploadFileIcon      from "@mui/icons-material/UploadFile";
 import AssessmentIcon      from "@mui/icons-material/Assessment";
 import PeopleIcon          from "@mui/icons-material/People";
-import TuneIcon            from "@mui/icons-material/Tune";
 import LockIcon            from "@mui/icons-material/Lock";
 import CompareArrowsIcon   from "@mui/icons-material/CompareArrows";
 import ExpandLessIcon      from "@mui/icons-material/ExpandLess";
@@ -47,8 +46,8 @@ const GRUPOS = [
     icone: <LockIcon sx={{ fontSize: 14 }} />,
     soAdmin: true,
     itens: [
-      { rotulo: "Usuários",          icone: <PeopleIcon />,   rota: "/usuarios" },
-      { rotulo: "Empresas e Filiais", icone: <BusinessIcon />, rota: "/empresas" },
+      { rotulo: "Usuários",  icone: <PeopleIcon />,   rota: "/usuarios" },
+      { rotulo: "Empresas",  icone: <BusinessIcon />, rota: "/empresas" },
     ],
   },
   {
@@ -63,15 +62,14 @@ const GRUPOS = [
     titulo: "Parâmetros",
     itens: [
       { rotulo: "Metas", icone: <FlagIcon />,  rota: "/metas" },
-      { rotulo: "Referência de Frete", icone: <TuneIcon />, rota: "/configuracoes/parametros-mercado", soAdmin: true },
       { rotulo: "Hubs Logísticos", icone: <HubIcon />, rota: "/configuracoes/hubs-logisticos" },
-      { rotulo: "Matriz Benchmark", icone: <GridOnIcon />, rota: "/inteligencia-mercado/matriz-od", soAdmin: true },
+      { rotulo: "Matriz Mercado", icone: <GridOnIcon />, rota: "/inteligencia-mercado/matriz-od", soAdmin: true },
     ],
   },
   {
     titulo: "Importação",
     itens: [
-      { rotulo: "Importação", icone: <UploadFileIcon />, rota: "/importar/cte" },
+      { rotulo: "Importar CTe", icone: <UploadFileIcon />, rota: "/importar/cte" },
     ],
   },
   {
@@ -80,6 +78,8 @@ const GRUPOS = [
       { rotulo: "Diagnóstico",  icone: <SpaceDashboardIcon />, rota: "/",          exato: true },
       { rotulo: "Análise de Eficiência", icone: <ManageSearchIcon />, rota: "/diagnostico/dlg" },
       { rotulo: "Radar de Custo", icone: <StackedLineChartIcon />, rota: "/benchmark/mbl" },
+      { rotulo: "Simulador de Hub", icone: <AltRouteIcon />, rota: "/simulador/hub" },
+      { rotulo: "Fechamento de Frete", icone: <ReceiptLongIcon />, rota: "/fechamento-frete" },
     ],
   },
   {
@@ -98,12 +98,6 @@ const GRUPOS = [
     ],
   },
   {
-    titulo: "Simulador",
-    itens: [
-      { rotulo: "Simulador de Hub", icone: <AltRouteIcon />, rota: "/simulador/hub" },
-    ],
-  },
-  {
     // Grupo próprio — "Recomendações" cruza Diagnóstico Logístico e Benchmark
     // Mercado (ver comentário em Recomendacoes.jsx), então não pertence a
     // nenhum dos dois módulos. Mesmo padrão de "Relatórios" (grupo com um
@@ -111,15 +105,6 @@ const GRUPOS = [
     titulo: "Recomendações",
     itens: [
       { rotulo: "Recomendações", icone: <RecommendIcon />, rota: "/diagnostico/recomendacoes" },
-    ],
-  },
-  {
-    // Grupo próprio — fechamento é rotina operacional mensal (fatura, fecha,
-    // reabre se preciso), não uma configuração estática; não pertence a
-    // "Parâmetros". Mesmo padrão de grupo com item único de "Recomendações".
-    titulo: "Fechamento de Custo de Frete",
-    itens: [
-      { rotulo: "Fechamento de Custo de Frete", icone: <ReceiptLongIcon />, rota: "/fechamento-frete" },
     ],
   },
   {

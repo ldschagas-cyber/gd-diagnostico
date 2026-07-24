@@ -727,6 +727,11 @@ class BenchmarkMercadoModel(Base):
     rs_kg_p50: Mapped[float] = mapped_column(Float, default=0.0)
     rs_kg_p75: Mapped[float] = mapped_column(Float, default=0.0)
     rs_kg_p90: Mapped[float] = mapped_column(Float, default=0.0)
+    # Faixa de % Frete/Mercadoria do corredor — substitui o BenchmarkModel
+    # legado (tabela `benchmarks`, region-only), que não modelava origem.
+    frete_pct_min: Mapped[float] = mapped_column(Float, default=0.0)
+    frete_pct_medio: Mapped[float] = mapped_column(Float, default=0.0)
+    frete_pct_max: Mapped[float] = mapped_column(Float, default=0.0)
     fonte: Mapped[str] = mapped_column(String(20), default="MERCADO")
     # Proveniência da pesquisa de mercado que sustenta esta linha — em
     # branco/NULL para linhas legadas ou ainda não documentadas.

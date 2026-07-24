@@ -1349,6 +1349,23 @@ class BenchmarkRepository(IBenchmarkRepository):
         return mp.benchmark_to_domain(m)
 
 
+class MatrizMercadoPctRepository:
+    """Faixa de % Frete/Mercadoria agregada a partir da Matriz Mercado
+    (benchmark_mercado, por corredor) — substitui o BenchmarkRepository
+    legado (tabela `benchmarks`, region-only) como fonte de
+    ``DiagnosticoUseCase._referencia_mercado_pct``. Só ``.list()`` é usado,
+    para manter a mesma interface duck-typed que o use case já espera."""
+
+    def __init__(self, db: Session):
+        self.db = db
+
+    def list(self):
+        from app.infrastructure.database.models import BenchmarkMercadoModel
+        return self.db.execute(
+            select(BenchmarkMercadoModel.frete_pct_min, BenchmarkMercadoModel.frete_pct_max)
+        ).all()
+
+
 # ══════════ Repositórios Benchmark OD (V2.1) ══════════
 from app.domain.entities import BenchmarkCorredor, ClusterCliente, HubLogistico
 from app.domain.repositories import (

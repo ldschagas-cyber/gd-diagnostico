@@ -44,7 +44,7 @@ export default function SimuladorHub() {
   if (!empresaAtivaId) {
     return (
       <Box>
-        <PageHeader titulo="Simulador de Hub de Origem" subtitulo="E se despachássemos de outro hub?" />
+        <PageHeader titulo="Simulador de Hub" subtitulo="E se despachássemos de outro hub?" />
         <VazioEstado mensagem="Selecione uma empresa" />
       </Box>
     );
@@ -53,7 +53,7 @@ export default function SimuladorHub() {
   return (
     <Box>
       <PageHeader
-        titulo="Simulador de Hub de Origem"
+        titulo="Simulador de Hub"
         subtitulo={`${empresaAtiva?.nome_fantasia || empresaAtiva?.razao_social} — custo e prazo reais do hub atual vs. referência de mercado do hub alternativo`}
       />
 

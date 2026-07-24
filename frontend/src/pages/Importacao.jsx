@@ -239,7 +239,7 @@ export default function Importacao() {
   if (!empresaAtivaId) {
     return (
       <Box>
-        <PageHeader titulo="Importação" subtitulo="Importação de CT-e e planilha" />
+        <PageHeader titulo="Importar CTe" subtitulo="Importação de CT-e e planilha" />
         <VazioEstado
           mensagem="Selecione uma empresa"
           descricao="Os dados são vinculados à empresa ativa. Selecione-a no topo da tela."
@@ -251,7 +251,7 @@ export default function Importacao() {
   return (
     <Box>
       <PageHeader
-        titulo="Importação"
+        titulo="Importar CTe"
         subtitulo={`Destino: ${empresaAtiva?.nome_fantasia || empresaAtiva?.razao_social}`}
         acoes={
           <Button

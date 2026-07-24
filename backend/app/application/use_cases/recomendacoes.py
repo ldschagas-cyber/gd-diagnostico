@@ -19,9 +19,9 @@ from app.application.use_cases.diagnostico import DiagnosticoUseCase
 from app.core.logging_config import get_logger
 from app.infrastructure.database.models import DlgAnaliticoModel
 from app.infrastructure.database.repositories import (
-    BenchmarkRepository,
     CTeRepository,
     EmpresaRepository,
+    MatrizMercadoPctRepository,
     MetaNacionalRepository,
     MetaRegionalRepository,
     RecomendacaoRepository,
@@ -374,6 +374,6 @@ class RecomendacoesUseCase:
             TransportadoraRepository(self.db),
             MetaNacionalRepository(self.db),
             MetaRegionalRepository(self.db),
-            BenchmarkRepository(self.db),
+            MatrizMercadoPctRepository(self.db),
         )
         return uc.gerar(empresa_id)

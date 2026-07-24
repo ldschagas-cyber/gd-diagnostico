@@ -34,6 +34,7 @@ const VAZIO = {
   origem_regiao: "", destino_regiao: "", modal: "", tipo_operacao: "TODOS", setor: "TODOS",
   faixa_peso_min: 0, faixa_peso_max: 0,
   rs_kg_p10: 0, rs_kg_p25: 0, rs_kg_p50: 0, rs_kg_p75: 0, rs_kg_p90: 0,
+  frete_pct_min: 0, frete_pct_medio: 0, frete_pct_max: 0,
   amostra_tamanho: "", metodologia: "", data_pesquisa: "",
 };
 
@@ -112,6 +113,9 @@ export default function MatrizOD() {
         rs_kg_p50: p50,
         rs_kg_p75: Number(form.rs_kg_p75) || 0,
         rs_kg_p90: Number(form.rs_kg_p90) || 0,
+        frete_pct_min: Number(form.frete_pct_min) || 0,
+        frete_pct_medio: Number(form.frete_pct_medio) || 0,
+        frete_pct_max: Number(form.frete_pct_max) || 0,
         amostra_tamanho: form.amostra_tamanho === "" ? null : Number(form.amostra_tamanho),
         metodologia: form.metodologia || "",
         data_pesquisa: form.data_pesquisa || null,
@@ -129,6 +133,8 @@ export default function MatrizOD() {
     faixa_peso_min: m.faixa_peso_min, faixa_peso_max: m.faixa_peso_max,
     rs_kg_p10: m.rs_kg_p10, rs_kg_p25: m.rs_kg_p25, rs_kg_p50: m.rs_kg_p50,
     rs_kg_p75: m.rs_kg_p75, rs_kg_p90: m.rs_kg_p90,
+    frete_pct_min: m.frete_pct_min ?? 0, frete_pct_medio: m.frete_pct_medio ?? 0,
+    frete_pct_max: m.frete_pct_max ?? 0,
     amostra_tamanho: m.amostra_tamanho ?? "", metodologia: m.metodologia || "",
     data_pesquisa: m.data_pesquisa || "",
   });
@@ -151,19 +157,33 @@ export default function MatrizOD() {
     />
   );
 
+  const ROTULO_FRETE_PCT = { frete_pct_min: "% Frete mín.", frete_pct_medio: "% Frete méd.", frete_pct_max: "% Frete máx." };
+  const fretePct = (campo) => (
+    <TextField
+      label={ROTULO_FRETE_PCT[campo]}
+      type="number" size="small" value={form[campo] ?? 0}
+      onChange={(e) => set(campo, e.target.value)}
+      InputProps={{ endAdornment: <InputAdornment position="end">%</InputAdornment> }}
+      sx={{
+        "& .MuiInputBase-root": { bgcolor: `${GD.ok}14` },
+        "& .MuiInputLabel-root": { color: GD.ok },
+      }}
+    />
+  );
+
   return (
     <Box>
       <PageHeader
-        titulo="Matriz Benchmark"
+        titulo="Matriz Mercado"
         subtitulo="Parâmetros › Referência de mercado por Origem → Destino (source of truth)"
       />
 
       <Alert severity="info" icon={<GridOnIcon />} sx={{ mb: 2.5 }}>
-        Esta é a <strong>fonte de verdade</strong> do benchmark de mercado em R$/kg,
-        por par origem→destino e percentis (P10–P90). Os valores são <strong>globais</strong>
-        {" "}e alimentam o comparativo do BID, o diagnóstico e a IA. A mediana <strong>P50</strong>
-        {" "}é a referência principal; <strong>P75</strong> marca o limite do que ainda é
-        “mercado”.
+        Esta é a <strong>fonte de verdade</strong> do benchmark de mercado, por par origem→destino:
+        R$/kg em percentis (P10–P90) e a faixa de <strong>% Frete/Mercadoria</strong> (mín/méd/máx).
+        Os valores são <strong>globais</strong> e alimentam o comparativo do BID, o diagnóstico e a
+        IA. A mediana <strong>P50</strong> é a referência principal; <strong>P75</strong> marca o
+        limite do que ainda é "mercado".
       </Alert>
 
       <Stack direction="row" spacing={1.5} sx={{ mb: 2.5 }}>
@@ -212,16 +232,33 @@ export default function MatrizOD() {
           <Box
             sx={{
               display: "grid",
-              gridTemplateColumns: { xs: "repeat(2, 1fr)", sm: "repeat(3, 1fr)", md: "repeat(7, 1fr)" },
-              gap: 1.5, mb: 1.5,
+              gridTemplateColumns: { xs: "repeat(2, 1fr)", sm: "repeat(3, 1fr)", md: "repeat(5, 1fr)" },
+              gap: 1.5, mb: 0.5,
             }}
           >
             {pct("rs_kg_p10")}{pct("rs_kg_p25")}{pct("rs_kg_p50")}{pct("rs_kg_p75")}{pct("rs_kg_p90")}
+          </Box>
+          <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 1.5 }}>
+            P10/P25/P50/P75/P90 já cobrem mínimo/mediana/máximo de R$/kg — sem campos redundantes.
+          </Typography>
+
+          <Box
+            sx={{
+              display: "grid",
+              gridTemplateColumns: { xs: "repeat(2, 1fr)", sm: "repeat(3, 1fr)", md: "repeat(5, 1fr)" },
+              gap: 1.5, mb: 0.5,
+            }}
+          >
+            {fretePct("frete_pct_min")}{fretePct("frete_pct_medio")}{fretePct("frete_pct_max")}
             <TextField label="Peso mín (kg)" type="number" size="small" value={form.faixa_peso_min ?? 0}
               onChange={(e) => set("faixa_peso_min", e.target.value)} />
             <TextField label="Peso máx (kg)" type="number" size="small" value={form.faixa_peso_max ?? 0}
               onChange={(e) => set("faixa_peso_max", e.target.value)} />
           </Box>
+          <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 1.5 }}>
+            % Frete vem da antiga Referência de Frete, agora por corredor. Peso mín/máx são campos
+            existentes, só reposicionados aqui por simetria.
+          </Typography>
 
           <Typography variant="overline" sx={{ color: GD.blue, fontWeight: 700, display: "block", mb: 1 }}>
             Proveniência da pesquisa
@@ -303,6 +340,9 @@ export default function MatrizOD() {
                     direction={orden.campo === "rs_kg_p90" && !orden.asc ? "desc" : "asc"}
                     onClick={() => ordenar("rs_kg_p90")}>P90</TableSortLabel>
                 </TableCell>
+                <TableCell align="right" sx={{ color: GD.ok }}>%Frete mín</TableCell>
+                <TableCell align="right" sx={{ color: GD.ok }}>%Frete méd</TableCell>
+                <TableCell align="right" sx={{ color: GD.ok }}>%Frete máx</TableCell>
                 <TableCell>
                   <TableSortLabel active={orden.campo === "amostra_tamanho"}
                     direction={orden.campo === "amostra_tamanho" && !orden.asc ? "desc" : "asc"}
@@ -315,7 +355,7 @@ export default function MatrizOD() {
             </TableHead>
             <TableBody>
               {lista.length === 0 && !carregando && (
-                <TableRow><TableCell colSpan={12} sx={{ color: "text.secondary", fontStyle: "italic" }}>
+                <TableRow><TableCell colSpan={15} sx={{ color: "text.secondary", fontStyle: "italic" }}>
                   Nenhuma linha cadastrada. Adicione uma linha acima ou importe em massa via Excel.
                 </TableCell></TableRow>
               )}
@@ -335,6 +375,9 @@ export default function MatrizOD() {
                   <TableCell align="right" sx={{ fontWeight: 700 }}>{m.rs_kg_p50?.toFixed(2)}</TableCell>
                   <TableCell align="right">{m.rs_kg_p75?.toFixed(2)}</TableCell>
                   <TableCell align="right">{m.rs_kg_p90?.toFixed(2)}</TableCell>
+                  <TableCell align="right" sx={{ color: GD.ok }}>{m.frete_pct_min?.toFixed(1)}%</TableCell>
+                  <TableCell align="right" sx={{ color: GD.ok }}>{m.frete_pct_medio?.toFixed(1)}%</TableCell>
+                  <TableCell align="right" sx={{ color: GD.ok }}>{m.frete_pct_max?.toFixed(1)}%</TableCell>
                   <TableCell>
                     {m.amostra_tamanho == null ? (
                       <Chip size="small" label="não pesquisado" sx={{ color: GD.danger, borderColor: GD.danger }} variant="outlined" />

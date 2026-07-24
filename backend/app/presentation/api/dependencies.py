@@ -13,6 +13,7 @@ from app.infrastructure.database.repositories import (
     CTeRepository,
     EmpresaRepository,
     FilialRepository,
+    MatrizMercadoPctRepository,
     MetaNacionalRepository,
     MetaRegionalRepository,
     RegiaoRepository,
@@ -68,6 +69,10 @@ def get_meta_regional_repo(db: Session = Depends(get_db)) -> MetaRegionalReposit
 
 def get_benchmark_repo(db: Session = Depends(get_db)) -> BenchmarkRepository:
     return BenchmarkRepository(db)
+
+
+def get_referencia_mercado_pct_repo(db: Session = Depends(get_db)) -> MatrizMercadoPctRepository:
+    return MatrizMercadoPctRepository(db)
 
 
 def get_cte_repo(db: Session = Depends(get_db)) -> CTeRepository:
