@@ -34,9 +34,13 @@ const BENCH_VAZIO = {
   frete_pct_min: 0, frete_pct_medio: 0, frete_pct_max: 0,
 };
 
+// Referência estável: usar `[]` inline como default do destructuring recria o
+// array a cada render, o que reacende o useEffect abaixo indefinidamente.
+const BENCHS_VAZIOS = [];
+
 export default function ParametrosMercado() {
   const { sucesso, erro: erroToast } = useFeedback();
-  const { data: benchs = [], isLoading: carregando, error: erroBench } = useBenchmarksPct();
+  const { data: benchs = BENCHS_VAZIOS, isLoading: carregando, error: erroBench } = useBenchmarksPct();
   const { salvar: salvarBenchMut } = useMutacoesBenchmarkPct();
 
   const [benchNacional, setBenchNacional] = useState(BENCH_VAZIO);
@@ -61,7 +65,10 @@ export default function ParametrosMercado() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [benchs]);
 
-  if (erroBench) erroToast(extrairErro(erroBench));
+  useEffect(() => {
+    if (erroBench) erroToast(extrairErro(erroBench));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [erroBench]);
 
   const salvandoNac = salvarBenchMut.isPending;
 
