@@ -212,6 +212,49 @@ Lotes reais de eventos de CT-e exportados pelo emissor (nome de arquivo sempre p
 
 **Sem migration**: nenhuma tabela nova; `cte_cancelamentos` reaproveitada com novos valores de `resultado`.
 
+## [6.17.0] — % Frete por corredor na Matriz Mercado; reorganiza menu
+
+Fecha a pendência registrada em [6.9.2]: a Matriz Mercado (`benchmark_mercado`)
+não modelava `% Frete/Mercadoria`, então o benchmark V1 legado (tabela
+`benchmarks`, region-only) continuava sendo a única fonte desse campo. O
+problema de fundo: classificar por região de **destino** (`macro_regiao_destino`,
+usado em Metas/Referência de Frete/DLG) mistura corredores muito diferentes na
+mesma média — ex.: Sudeste→Nordeste (longa distância) e Nordeste→Nordeste
+(local) caem no mesmo balde "Nordeste".
+
+**Matriz Mercado ganha `frete_pct_min/medio/max`** (migration `f3a8d2c6b9e4`),
+na mesma linha de corredor (origem×destino×setor×operação×modal×peso) que já
+hospeda os percentis de R$/kg — sem duplicar min/med/máx de R$/kg, que os
+percentis P10/P50/P90 já cobrem. `DiagnosticoUseCase._referencia_mercado_pct()`
+migra do `BenchmarkRepository` legado para o novo `MatrizMercadoPctRepository`
+(agrega min/max de %Frete entre os corredores cadastrados). `MatrizOD.jsx`
+ganha os 3 campos novos no formulário (linha 2: %Frete + Peso mín/máx, 5+5) e
+na tabela.
+
+**Referência de Frete aposentada**: rota e item de menu removidos
+(`/configuracoes/parametros-mercado` agora redireciona para a Matriz Mercado,
+mesmo padrão de `/benchmark/matriz-od`); `BenchmarkModel`/tabela `benchmarks`
+preservados intactos, só desconectados da navegação — nenhum motor de cálculo
+(DLG/MBL/MCL) os lia diretamente.
+
+**Backfill provisório** (`scripts/backfill_matriz_mercado_pct.py`, fora do
+fluxo normal): copia o %Frete legado por região para uma linha intra-regional
+(origem=destino) da Matriz Mercado, marcada em `metodologia` como provisória —
+evita que o indicador de %Frete do Dashboard fique em branco até a pesquisa de
+corredor real avançar. Idempotente.
+
+**Renomeações de tela/menu**: Empresas e Filiais → Empresas; Importação →
+Importar CTe; Simulador de Hub de Origem → Simulador de Hub; Fechamento de
+Custo de Frete → Fechamento de Frete; Matriz Benchmark → Matriz Mercado.
+Simulador de Hub e Fechamento de Frete migram para dentro do menu Diagnóstico
+Logístico (grupos próprios removidos, ficaram vazios). Aba "Mapeamento Hubs"
+de Hubs Logísticos → "Mapeamentos de Hubs".
+
+**Deploy**: novo `atualizar_producao.sh` (raiz do repo) — `git pull` + rebuild
++ espera o backend responder, com mensagens claras em caso de falha. Doc
+`08_instalacao_deploy.md` atualizada; migrações do Alembic já rodavam sozinhas
+dentro do container, sem precisar do passo manual que a doc antiga sugeria.
+
 ---
 
 ## Nota sobre nomenclatura de versão
