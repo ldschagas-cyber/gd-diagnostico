@@ -6,6 +6,7 @@ import { FeedbackProvider } from "./components/Feedback";
 import ProtectedRoute from "./components/ProtectedRoute";
 import AppLayout from "./layouts/AppLayout";
 import Login from "./pages/Login";
+import SelecionarEmpresa from "./pages/SelecionarEmpresa";
 import Dashboard from "./pages/Dashboard";
 import Empresas from "./pages/Empresas";
 import Filiais from "./pages/Filiais";
@@ -56,6 +57,14 @@ export default function App() {
           <EmpresaProvider>
             <Routes>
               <Route path="/login" element={<Login />} />
+              <Route
+                path="/selecionar-empresa"
+                element={
+                  <ProtectedRoute>
+                    <SelecionarEmpresa />
+                  </ProtectedRoute>
+                }
+              />
               <Route
                 element={
                   <ProtectedRoute>

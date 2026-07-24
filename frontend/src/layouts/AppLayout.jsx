@@ -36,7 +36,7 @@ import HubIcon              from "@mui/icons-material/Hub";
 import AltRouteIcon         from "@mui/icons-material/AltRoute";
 import { useAuth }         from "../contexts/AuthContext";
 import { usePrefetch }     from "../hooks/usePrefetch";
-import EmpresaSelector     from "../components/EmpresaSelector";
+import EmpresaAtivaChip    from "../components/EmpresaAtivaChip";
 import { GD }              from "../theme";
 
 const LARGURA = 256;
@@ -289,7 +289,7 @@ export default function AppLayout() {
             {!desktop && (
               <IconButton onClick={() => setAberto(true)} edge="start"><MenuIcon /></IconButton>
             )}
-            <Box sx={{ flex: 1 }}><EmpresaSelector /></Box>
+            <Box sx={{ flex: 1 }}><EmpresaAtivaChip /></Box>
             <Tooltip title="Assistente">
               <IconButton onClick={() => navigate("/inteligencia/assistente")} size="small">
                 <PsychologyIcon sx={{ color: GD.indigo }} />
