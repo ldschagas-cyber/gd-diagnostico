@@ -108,11 +108,27 @@ gunzip -c backup_AAAAMMDD.sql.gz | docker exec -i gd_frete_db psql -U gd_user gd
 
 ### 4.6 Atualização de versão
 
+Forma recomendada — script único que faz `git pull` + rebuild + espera o
+backend responder, e para com uma mensagem clara se algo falhar:
+
+```bash
+./atualizar_producao.sh
+```
+
+Equivalente manual, passo a passo (o que o script acima faz por trás):
+
 ```bash
 git pull
 docker compose -f docker-compose.prod.yml up -d --build
-docker compose -f docker-compose.prod.yml exec backend alembic upgrade head
 ```
+
+As migrações do Alembic já rodam sozinhas dentro do container (ver
+`command:` do serviço `backend` em `docker-compose.prod.yml`) — não é
+necessário rodar `alembic upgrade head` manualmente depois do `up`.
+
+**Passos extras pontuais de uma versão específica** (ex.: um script de
+backfill de dado) aparecem só no changelog/anúncio daquela versão — não
+fazem parte da rotina de toda atualização.
 
 ### 4.7 Monitoramento básico
 
