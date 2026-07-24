@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Box,
   Button,
@@ -35,7 +35,9 @@ export default function Filiais() {
   const [form, setForm] = useState({ razao_social: "", cnpj: "", cidade: "", uf: "" });
   const [confirmar, setConfirmar] = useState(null);
 
-  if (error) erroToast(extrairErro(error));
+  useEffect(() => {
+    if (error) erroToast(extrairErro(error));
+  }, [error, erroToast]);
 
   const abrirNovo = () => {
     setEditando(null);

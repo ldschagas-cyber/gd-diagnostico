@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import {
   Box, Card, CardContent, Typography, Stack, TextField, Button,
   Table, TableHead, TableRow, TableCell, TableBody, MenuItem, IconButton,
@@ -54,7 +54,9 @@ function AbaHubs() {
   const [form, setForm] = useState({ codigo: "", nome: "", descricao: "", ativo: true });
   const [confirmar, setConfirmar] = useState(null);
 
-  if (error) erroToast(extrairErro(error));
+  useEffect(() => {
+    if (error) erroToast(extrairErro(error));
+  }, [error, erroToast]);
 
   if (!empresaAtivaId) {
     return (
@@ -232,7 +234,9 @@ function AbaMapeamento() {
   const { criar, remover: removerMut, importarExcel: importarExcelMut } = useMutacoesCluster(empresaAtivaId);
   const [novo, setNovo] = useState({ uf: "", municipio: "", hub_id: "" });
 
-  if (error) erroToast(extrairErro(error));
+  useEffect(() => {
+    if (error) erroToast(extrairErro(error));
+  }, [error, erroToast]);
 
   const baixarModelo = async () => {
     try {
@@ -419,7 +423,9 @@ function AbaCorredor() {
   const { salvar: salvarMut, remover: removerMut, importarExcel: importarExcelMut } = useMutacoesCorredorRef(empresaAtivaId);
   const [form, setForm] = useState(CORREDOR_VAZIO);
 
-  if (error) erroToast(extrairErro(error));
+  useEffect(() => {
+    if (error) erroToast(extrairErro(error));
+  }, [error, erroToast]);
 
   const baixarModelo = async () => {
     try {

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Box,
   Button,
@@ -47,7 +47,9 @@ export default function Usuarios() {
   const [form, setForm] = useState(VAZIO);
   const [confirmar, setConfirmar] = useState(null);
 
-  if (error) erroToast(extrairErro(error));
+  useEffect(() => {
+    if (error) erroToast(extrairErro(error));
+  }, [error, erroToast]);
 
   const abrirNovo = () => {
     setEditando(null);

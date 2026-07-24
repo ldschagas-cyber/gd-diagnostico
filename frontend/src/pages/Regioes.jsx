@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   Box,
@@ -36,7 +36,9 @@ export default function Regioes() {
   const [form, setForm] = useState({ nome: "", descricao: "" });
   const [confirmar, setConfirmar] = useState(null);
 
-  if (error) erroToast(extrairErro(error));
+  useEffect(() => {
+    if (error) erroToast(extrairErro(error));
+  }, [error, erroToast]);
 
   const abrirNovo = () => {
     setEditando(null);

@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useRef, useState, useEffect } from "react";
 import {
   Box, Card, CardContent, Typography, Stack, TextField, Button,
   Table, TableHead, TableRow, TableCell, TableBody, MenuItem, IconButton,
@@ -46,7 +46,9 @@ export default function MatrizOD() {
   const [filtroSetor, setFiltroSetor] = useState(null);
   const fileRef = useRef(null);
 
-  if (error) erroToast(extrairErro(error));
+  useEffect(() => {
+    if (error) erroToast(extrairErro(error));
+  }, [error, erroToast]);
 
   const baixarModelo = async () => {
     try {

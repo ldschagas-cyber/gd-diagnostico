@@ -6,7 +6,7 @@
  * - Cadastro de filiais em lote: cole vários CNPJs e o sistema busca e cadastra todos de uma vez
  * - Gerenciamento de filiais individuais na mesma tela
  */
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   Box, Grid, Card, CardContent, CardHeader, Button, TextField,
@@ -339,7 +339,9 @@ export default function Empresas() {
   const [dialogLote, setDialogLote]   = useState(false);
   const [confirmar, setConfirmar]     = useState(null);
 
-  if (error) erroToast(extrairErro(error));
+  useEffect(() => {
+    if (error) erroToast(extrairErro(error));
+  }, [error, erroToast]);
 
   const salvarEmpresa = async (payload) => {
     try {

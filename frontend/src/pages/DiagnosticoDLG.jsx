@@ -318,7 +318,9 @@ export default function DiagnosticoDLG() {
   const resumo = resumoBruto && Object.keys(resumoBruto).length ? resumoBruto : null;
   const carregando = carregandoResumo || carregandoAnalitico || carregandoOutliers;
   const erroCarregamento = erroResumo || erroAnalitico || erroOutliers;
-  if (erroCarregamento) erroToast(extrairErro(erroCarregamento));
+  useEffect(() => {
+    if (erroCarregamento) erroToast(extrairErro(erroCarregamento));
+  }, [erroCarregamento, erroToast]);
 
   const contagemPctFrete = useMemo(() => outliers.filter((o) => o.tipo_outlier === "PCT_FRETE").length, [outliers]);
   const contagemRsKg = useMemo(() => outliers.filter((o) => o.tipo_outlier === "RS_KG_2DP").length, [outliers]);

@@ -144,7 +144,9 @@ export default function FechamentoFrete() {
     }
   }, [data]);
 
-  if (error) erroToast(extrairErro(error));
+  useEffect(() => {
+    if (error) erroToast(extrairErro(error));
+  }, [error, erroToast]);
 
   const fechado = data?.status === "FECHADO";
   const totalNacional = useMemo(

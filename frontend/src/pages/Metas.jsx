@@ -29,11 +29,15 @@ import { extrairErro } from "../api/client";
 import { MACRO_REGIOES, rotuloMacro, fmtMoeda } from "../utils/format";
 import { GD } from "../theme";
 
+// Referência estável: usar `[]` inline como default do destructuring recria o
+// array a cada render, o que reacenderia o useEffect abaixo indefinidamente.
+const REGS_VAZIAS = [];
+
 export default function Metas() {
   const { empresaAtivaId } = useEmpresa();
   const { sucesso, erro: erroToast } = useFeedback();
   const { data: nac, isLoading: carregandoNac, error: erroNac } = useMetaNacional(empresaAtivaId);
-  const { data: regs = [], isLoading: carregandoRegs, error: erroRegs } = useMetasRegionais(empresaAtivaId);
+  const { data: regs = REGS_VAZIAS, isLoading: carregandoRegs, error: erroRegs } = useMetasRegionais(empresaAtivaId);
   const { nacional: salvarNacionalMut, regional: salvarRegionalMut } = useSalvarMetas(empresaAtivaId);
   const carregando = carregandoNac || carregandoRegs;
 
@@ -73,8 +77,13 @@ export default function Metas() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [regs]);
 
-  if (erroNac) erroToast(extrairErro(erroNac));
-  if (erroRegs) erroToast(extrairErro(erroRegs));
+  useEffect(() => {
+    if (erroNac) erroToast(extrairErro(erroNac));
+  }, [erroNac, erroToast]);
+
+  useEffect(() => {
+    if (erroRegs) erroToast(extrairErro(erroRegs));
+  }, [erroRegs, erroToast]);
 
   const salvandoNac = salvarNacionalMut.isPending;
 
