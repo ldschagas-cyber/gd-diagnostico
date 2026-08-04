@@ -307,21 +307,6 @@ class FechamentoHistoricoItemOut(BaseModel):
     frete_contratado: float
 
 
-# ---------------- Benchmark (Módulo Benchmark Logístico) ----------------
-class BenchmarkIn(BaseModel):
-    regiao: RegiaoBenchmarkEnum
-    frete_kg_min: float = 0.0
-    frete_kg_medio: float = 0.0
-    frete_kg_max: float = 0.0
-    frete_pct_min: float = 0.0
-    frete_pct_medio: float = 0.0
-    frete_pct_max: float = 0.0
-
-
-class BenchmarkOut(BenchmarkIn):
-    id: Optional[int] = None
-
-
 # ---------------- Importação ----------------
 class ResultadoImportacaoOut(BaseModel):
     importados: int

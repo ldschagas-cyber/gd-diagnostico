@@ -254,13 +254,6 @@ export const relatoriosApi = {
   },
 };
 
-// ------------------------------ Benchmarks ------------------------------
-export const benchmarksApi = {
-  listar: () => api.get("/benchmarks").then((r) => r.data),
-  salvar: (regiao, payload) =>
-    api.put(`/benchmarks/${regiao}`, payload).then((r) => r.data),
-};
-
 // ------------------------- Benchmark (análise) -------------------------
 export const benchmarkApi = {
   nacional: (empresaId, params = {}) =>

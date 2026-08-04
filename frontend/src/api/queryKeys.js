@@ -52,7 +52,6 @@ export const qk = {
   benchmarkSimuladorEconomia: (empresaId, params = {}) => ["benchmark", "simulador-economia", empresaId, params],
   benchmarkIndicadoresMercado: (empresaId, params = {}) => ["benchmark", "indicadores-mercado", empresaId, params],
   benchmarkSimuladorHub: (empresaId, params = {}) => ["benchmark", "simulador-hub", empresaId, params],
-  benchmarksRegioes: () => ["benchmarks", "regioes"],
   hubs: (empresaId, apenasAtivos = false) => ["hubs", empresaId, apenasAtivos],
   clusters: (empresaId) => ["clusters", empresaId],
   corredoresRef: (empresaId) => ["corredores-ref", empresaId],

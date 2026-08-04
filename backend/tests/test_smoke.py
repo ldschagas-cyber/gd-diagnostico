@@ -180,29 +180,6 @@ def test_peso_taxado_usa_o_maior_peso():
     assert r.valor_mercadoria == 5000.0
 
 
-def test_benchmark_seed_e_edicao(client, auth_headers):
-    """Fase A: 6 benchmarks semeados (5 regiões + nacional) e edição por admin."""
-    r = client.get("/api/v1/benchmarks", headers=auth_headers)
-    assert r.status_code == 200
-    linhas = r.json()
-    assert len(linhas) == 6
-    nacional = next(b for b in linhas if b["regiao"] == "NACIONAL")
-    assert nacional["frete_kg_medio"] == 1.65
-    assert nacional["frete_pct_medio"] == 10.0
-    # edição (upsert) por admin
-    up = client.put(
-        "/api/v1/benchmarks/SUDESTE",
-        headers=auth_headers,
-        json={
-            "regiao": "SUDESTE",
-            "frete_kg_min": 0.75, "frete_kg_medio": 1.00, "frete_kg_max": 1.25,
-            "frete_pct_min": 4.5, "frete_pct_medio": 6.5, "frete_pct_max": 8.5,
-        },
-    )
-    assert up.status_code == 200
-    assert up.json()["frete_kg_medio"] == 1.00
-
-
 def test_benchmark_analise_classificacao(client, auth_headers):
     """Fase B/C: nacional, regional e transportadoras com classificação."""
     emp = client.post(

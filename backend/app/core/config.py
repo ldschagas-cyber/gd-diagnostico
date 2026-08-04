@@ -49,6 +49,11 @@ class Settings(BaseSettings):
     # Importação (RNF006)
     MAX_CTE_BATCH: int = 10000
 
+    # Autenticação serviço-a-serviço (ex.: CRM consultando o Benchmark Setorial
+    # via /internal) — chave estática compartilhada, não é JWT de usuário.
+    # Vazio = endpoints /internal ficam bloqueados (fail-closed).
+    INTERNAL_API_KEY: str | None = None
+
     # ─────────────── V4 — Inteligência Logística com IA ───────────────
     # Modo simulado: quando True, a IA retorna respostas mock (sem custo de API).
     # Plugue as chaves reais e mude para False para ativar os modelos.

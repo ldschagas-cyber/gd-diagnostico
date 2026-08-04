@@ -12,7 +12,6 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import {
   benchmarkApi,
-  benchmarksApi,
   bidApi,
   cidadesApi,
   clustersApi,
@@ -221,22 +220,6 @@ export function useFechamentoMutacoes(empresaId) {
     reabrir: useMutation({
       mutationFn: (competencia) => fechamentoApi.reabrir(empresaId, competencia),
       onSuccess: invalidar,
-    }),
-  };
-}
-
-/* ──────────────── Benchmark % Frete (legado, tela Parâmetros de Mercado) ──── */
-
-export function useBenchmarksPct(opts = {}) {
-  return useQuery({ queryKey: qk.benchmarksRegioes(), queryFn: benchmarksApi.listar, ...opts });
-}
-
-export function useMutacoesBenchmarkPct() {
-  const qc = useQueryClient();
-  return {
-    salvar: useMutation({
-      mutationFn: ({ regiao, payload }) => benchmarksApi.salvar(regiao, payload),
-      onSuccess: () => qc.invalidateQueries({ queryKey: qk.benchmarksRegioes() }),
     }),
   };
 }

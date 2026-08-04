@@ -1,5 +1,5 @@
 """Dependências do FastAPI: injeção de repositórios, casos de uso e usuário atual."""
-from fastapi import Depends, HTTPException, Request, status
+from fastapi import Depends, Header, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 
@@ -136,6 +136,15 @@ def get_current_user(
     if user is None or not user.is_active:
         raise cred_exc
     return user
+
+
+# ---- Serviço-a-serviço (ex.: CRM chamando /internal) ----
+def verify_internal_api_key(x_internal_api_key: str | None = Header(default=None)) -> None:
+    """Fail-closed: sem INTERNAL_API_KEY configurada no servidor, os endpoints
+    /internal ficam inacessíveis mesmo com qualquer header — não existe um
+    'modo aberto' acidental."""
+    if not settings.INTERNAL_API_KEY or x_internal_api_key != settings.INTERNAL_API_KEY:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Credenciais internas inválidas")
 
 
 def get_current_superuser(user: User = Depends(get_current_user)) -> User:
