@@ -222,7 +222,11 @@ export default function Usuarios() {
               type="password"
               value={form.senha}
               onChange={(e) => setForm({ ...form, senha: e.target.value })}
-              helperText="Mínimo de 6 caracteres."
+              helperText={
+                editando
+                  ? "Mínimo de 6 caracteres. Deixe em branco para manter a atual."
+                  : "Mínimo de 8 caracteres, com pelo menos uma letra e um número."
+              }
               required={!editando}
             />
             <Stack direction="row" spacing={3}>
