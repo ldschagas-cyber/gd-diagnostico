@@ -95,6 +95,8 @@ Este princípio de produto é distinto do papel das *ferramentas de IA usadas no
 
 **Regra de priorização**: toda decisão de produto deve priorizar primeiro o uso interno pelos analistas. Uma funcionalidade que beneficia o Portal do Cliente futuro, mas não fortalece a Plataforma do Analista hoje, não deve furar a fila do roadmap técnico aprovado ([`10_roadmap.md`](10_roadmap.md), [`22_plano_diretor_tecnico.md`](22_plano_diretor_tecnico.md) Seção 9).
 
+**Atualização (2026-08-06) — decisão comercial tomada.** A "decisão comercial futura" referida acima foi tomada: a GD Conecta decidiu iniciar a Fase Posterior e priorizar um primeiro recorte do Portal do Cliente (ver Validação Estratégica e PRD em [`specs/v6.18.0/`](specs/v6.18.0/)). Isto **destrava a fase, não revoga a Regra de priorização**: o primeiro recorte do Portal do Cliente foi desenhado como uma camada de acesso somente-leitura sobre indicadores, gráficos e recomendações que o motor analítico já produz para o analista hoje — reutilizando o mesmo motor (Seção 6) e os mesmos componentes do Relatório Executivo HTML, sem introduzir cálculo paralelo nem desviar capacidade de engenharia do roadmap técnico já aprovado. Detalhamento completo da avaliação contra o checklist de Governança do Produto (Seção 21 do Plano Diretor) na Validação Estratégica de `specs/v6.18.0/`.
+
 ## 10. Diretrizes Arquiteturais
 
 Confirmação explícita, como decisão de produto, dos princípios arquiteturais já documentados em [`03_arquitetura_tecnica.md`](03_arquitetura_tecnica.md) e avaliados na Fase 1 de auditoria ([`14_fase1_auditoria_arquitetural.md`](14_fase1_auditoria_arquitetural.md)):
@@ -130,4 +132,4 @@ A definição do nível de versão é sempre uma decisão de engenharia, baseada
 
 ---
 
-*Documento criado em 2026-07-08 como parte da camada oficial de governança do projeto. Versão deste documento: 1.0.0. Nenhum código, banco de dados, API ou infraestrutura foi alterado na sua produção. Ver [`00_README.md`](00_README.md) para o índice completo da documentação e [`README_AI.md`](README_AI.md) para o guia de uso desta documentação por agentes de IA.*
+*Documento criado em 2026-07-08 como parte da camada oficial de governança do projeto. Versão deste documento: 1.1.0 (atualização de 2026-08-06 na Seção 9 — registro da decisão comercial de iniciar a Fase Posterior do Portal do Cliente; texto original da Seção 9 preservado acima, sem remoção). Nenhum código, banco de dados, API ou infraestrutura foi alterado na sua produção. Ver [`00_README.md`](00_README.md) para o índice completo da documentação e [`README_AI.md`](README_AI.md) para o guia de uso desta documentação por agentes de IA.*

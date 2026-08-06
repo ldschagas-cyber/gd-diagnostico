@@ -5,11 +5,17 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.database import get_db
-from app.core.security import ACCESS_COOKIE_NAME, decode_access_token
-from app.domain.entities import User
+from app.core.security import (
+    ACCESS_COOKIE_NAME,
+    CLIENTE_ACCESS_COOKIE_NAME,
+    decode_access_token,
+    decode_cliente_access_token,
+)
+from app.domain.entities import ClientePortalUser, User
 from app.infrastructure.database.repositories import (
     BenchmarkRepository,
     CidadeRepository,
+    ClientePortalUserRepository,
     CTeRepository,
     EmpresaRepository,
     FilialRepository,
@@ -134,6 +140,50 @@ def get_current_user(
         raise cred_exc
     user = user_repo.get(int(sub))
     if user is None or not user.is_active:
+        raise cred_exc
+    return user
+
+
+# ---- Portal do Cliente (v6.18.0): usuário-cliente atual ----
+# auto_error=False: mesmo motivo do oauth2_scheme interno — o cookie httpOnly
+# (fluxo do navegador) é tentado primeiro; o header Bearer (fluxo de API/
+# testes) continua funcionando como alternativa, sempre validado por
+# decode_cliente_access_token (exige aud=portal_cliente).
+oauth2_scheme_cliente = OAuth2PasswordBearer(
+    tokenUrl=f"{settings.API_V1_PREFIX}/portal/auth/login", auto_error=False
+)
+
+
+def get_cliente_portal_user_repo(db: Session = Depends(get_db)) -> ClientePortalUserRepository:
+    return ClientePortalUserRepository(db)
+
+
+def get_current_cliente_user(
+    request: Request,
+    token_header: str | None = Depends(oauth2_scheme_cliente),
+    cliente_repo: ClientePortalUserRepository = Depends(get_cliente_portal_user_repo),
+) -> ClientePortalUser:
+    """Autentica o usuário do Portal do Cliente (cookie httpOnly do navegador
+    OU header Bearer para API/testes) — nunca de path/query.
+
+    O escopo de dado é sempre `current_user.empresa_id`, nunca um parâmetro
+    que o cliente possa manipular na URL (Especificação Técnica v6.18.0
+    §3.4). Rejeita qualquer token que não traga aud=portal_cliente
+    (decode_cliente_access_token já garante isso) — um token interno válido
+    nunca autentica aqui, mesmo enviado por header.
+    """
+    cred_exc = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Credenciais inválidas",
+    )
+    token = token_header or request.cookies.get(CLIENTE_ACCESS_COOKIE_NAME)
+    if not token:
+        raise cred_exc
+    sub = decode_cliente_access_token(token)
+    if sub is None:
+        raise cred_exc
+    user = cliente_repo.get(int(sub))
+    if user is None or not user.ativo:
         raise cred_exc
     return user
 

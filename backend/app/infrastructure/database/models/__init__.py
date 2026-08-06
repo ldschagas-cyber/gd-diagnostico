@@ -66,6 +66,54 @@ class UsuarioEmpresaModel(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
 
+class ClientePortalUserModel(Base):
+    """Usuário do Portal do Cliente (v6.18.0) — audiência separada de `UserModel`.
+
+    Diferente do usuário interno (analista/admin GD Conecta), pertence a
+    exatamente UMA empresa (empresa_id obrigatório, não M:N) — o executivo
+    da empresa cliente nunca troca de empresa nem vê dado de outra. E-mail é
+    globalmente único (não só por empresa) porque o login não pergunta "de
+    qual empresa" antes de autenticar. Ver Especificação Técnica v6.18.0 §3.2.
+    """
+    __tablename__ = "clientes_portal_users"
+    __table_args__ = {"extend_existing": True}
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    empresa_id: Mapped[int] = mapped_column(ForeignKey("empresas.id"), nullable=False, index=True)
+    nome: Mapped[str] = mapped_column(String(150))
+    email: Mapped[str] = mapped_column(String(150), unique=True, index=True)
+    hashed_password: Mapped[str] = mapped_column(String(255))
+    ativo: Mapped[bool] = mapped_column(Boolean, default=True)
+    ultimo_acesso: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
+class PortalOportunidadeFlagModel(Base):
+    """Sinalização de "priorizada" feita pelo cliente sobre uma recomendação.
+
+    Deliberadamente desacoplada de `RecomendacaoModel` — não altera o fluxo
+    de trabalho do analista (`status` ABERTA/EM_ANDAMENTO/CONCLUIDA/DESCARTADA)
+    nem nenhum dado do motor analítico (PRD v6.18.0 CA-5, Especificação
+    Técnica v6.18.0 §3.7). É só metadado de interesse do cliente.
+    """
+    __tablename__ = "portal_oportunidade_flags"
+    __table_args__ = (
+        UniqueConstraint("recomendacao_id", "cliente_portal_user_id", name="uq_portal_flag_recomendacao_cliente"),
+        {"extend_existing": True},
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    recomendacao_id: Mapped[int] = mapped_column(ForeignKey("recomendacoes.id"), nullable=False, index=True)
+    empresa_id: Mapped[int] = mapped_column(ForeignKey("empresas.id"), nullable=False, index=True)
+    cliente_portal_user_id: Mapped[int] = mapped_column(
+        ForeignKey("clientes_portal_users.id"), nullable=False
+    )
+    priorizada: Mapped[bool] = mapped_column(Boolean, default=True)
+    atualizado_em: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), onupdate=func.now()
+    )
+
+
 class EmpresaModel(Base):
     __tablename__ = "empresas"
     __table_args__ = {"extend_existing": True}

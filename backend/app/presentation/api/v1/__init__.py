@@ -17,6 +17,7 @@ from app.presentation.api.v1 import (
     internal,
     inteligencia,
     metas,
+    portal_cliente,
     recomendacoes,
     regioes,
     relatorios,
@@ -26,6 +27,7 @@ from app.presentation.api.v1 import (
 
 api_router = APIRouter()
 api_router.include_router(auth.router)
+api_router.include_router(portal_cliente.router)
 api_router.include_router(internal.router)
 api_router.include_router(usuarios.router)
 api_router.include_router(empresas.router)

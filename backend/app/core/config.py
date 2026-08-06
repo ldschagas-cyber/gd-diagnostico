@@ -39,6 +39,9 @@ class Settings(BaseSettings):
         "http://127.0.0.1:5173",
         "http://localhost",
         "http://localhost:8080",
+        # Portal do Cliente (v6.18.0) — frontend-portal/, dev local, porta própria.
+        "http://localhost:5175",
+        "http://127.0.0.1:5175",
     ]
 
     # Usuário administrador inicial (seed)

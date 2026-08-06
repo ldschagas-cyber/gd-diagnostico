@@ -10,6 +10,7 @@ from app.domain.entities import (
     Benchmark,
     CTe,
     Cidade,
+    ClientePortalUser,
     Empresa,
     FechamentoMensal,
     Filial,
@@ -45,6 +46,21 @@ class IRepository(ABC, Generic[T]):
 class IUserRepository(IRepository[User]):
     @abstractmethod
     def get_by_email(self, email: str) -> Optional[User]: ...
+
+
+class IClientePortalUserRepository(ABC):
+    """Não estende `IRepository` genérico — o Portal do Cliente não expõe
+    list/create/update/delete via API; usuário-cliente é provisionado por
+    script de seed (v6.18.0), não por CRUD."""
+
+    @abstractmethod
+    def get(self, id: int) -> Optional[ClientePortalUser]: ...
+
+    @abstractmethod
+    def get_by_email(self, email: str) -> Optional[ClientePortalUser]: ...
+
+    @abstractmethod
+    def atualizar_ultimo_acesso(self, id: int) -> None: ...
 
 
 class IEmpresaRepository(IRepository[Empresa]):
