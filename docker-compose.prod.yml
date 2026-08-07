@@ -6,13 +6,14 @@
 #   docker network create gd_conecta_network   # uma única vez no servidor
 #   docker compose -f docker-compose.prod.yml up -d --build
 #
-# Este servidor hospeda mais de uma aplicação (GD Diagnóstico + GD CRM).
-# Por isso o frontend NÃO expõe as portas 80/443 diretamente — quem faz
-# isso é o Nginx central em /opt (nginx-proxy.conf), que termina o TLS
-# para os dois domínios e encaminha para cada app por dentro da rede
-# Docker compartilhada 'gd_conecta_network'.
+# Este servidor hospeda mais de uma aplicação (GD Diagnóstico + GD CRM +
+# Portal do Cliente). Por isso os frontends NÃO expõem as portas 80/443
+# diretamente — quem faz isso é o Nginx central em /opt (nginx-proxy.conf),
+# que termina o TLS para os domínios e encaminha para cada app por dentro
+# da rede Docker compartilhada 'gd_conecta_network'.
 #
 # Aplicação disponível em: https://diagnostico.gdconecta.com.br
+# Portal do Cliente (v6.18.0) em: https://portal.gdconecta.com.br
 # ============================================================
 
 services:
@@ -72,6 +73,23 @@ services:
       args:
         VITE_API_URL: /api/v1   # proxy reverso: /api/v1 → backend:8000/api/v1
     container_name: gd_frete_frontend
+    restart: always
+    expose:
+      - "80"
+    depends_on:
+      - backend
+    networks:
+      - gd_conecta_network
+
+  # ---- Portal do Cliente — Frontend (v6.18.0) --------------------
+  # App separado do painel do analista (outro build, outra origem).
+  # Mesmo backend (gd_frete_backend) — audiência isolada por cookie/claim.
+  frontend-portal:
+    build:
+      context: ./frontend-portal
+      args:
+        VITE_API_URL: /api/v1/portal
+    container_name: gd_frete_frontend_portal
     restart: always
     expose:
       - "80"
