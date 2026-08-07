@@ -255,6 +255,58 @@ de Hubs Logísticos → "Mapeamentos de Hubs".
 `08_instalacao_deploy.md` atualizada; migrações do Alembic já rodavam sozinhas
 dentro do container, sem precisar do passo manual que a doc antiga sugeria.
 
+## [6.18.0] — Portal do Cliente, primeiro recorte (Portal Executivo)
+
+Primeira funcionalidade da plataforma desenhada primariamente para o executivo
+da empresa cliente, não para o analista — decisão comercial registrada em
+`00_contexto_oficial.md` §9 e `22_plano_diretor_tecnico.md` §16 (2026-08-06),
+avaliada contra o checklist de Governança do Produto (§21) em
+`docs/specs/v6.18.0/v6.18.0_validacao_estrategica.md`. Processo oficial
+completo seguido: Validação Estratégica → PRD → Protótipo Funcional (Revisão
+aprovada) → Especificação Técnica → Implementação → Testes.
+
+**App novo, separado**: `frontend-portal/` (React + Vite, deploy próprio,
+ainda não publicado em produção — ver nota de deploy abaixo), autenticação
+isolada do painel interno (cookies `gd_frete_cliente_access`/`_refresh`,
+claim JWT `aud=portal_cliente`, rejeitada explicitamente por `decode_access_token`
+do lado interno e vice-versa — defesa em profundidade, achado SEC-01 como
+precedente). Três telas: Login, Dashboard Executivo (resumo executivo em
+semáforo, 5 KPIs, 4 gráficos, plano de ação) e Oportunidades Prioritárias
+(ação de "priorizar", sem alterar dado do motor). Os demais itens de menu
+(Diagnóstico/Benchmark/Inteligência/Governança/Relatórios/Minha Conta) mostram
+aviso "ainda não disponível" — sem tela própria nesta versão.
+
+**Reutiliza 100% o motor analítico existente** — `ScoreLogisticoUseCase`,
+`BenchmarkUseCase`, `RecomendacoesUseCase` — nenhum cálculo novo, nenhuma
+tabela analítica alterada. Dois ajustes de escopo em relação ao protótipo
+original, por ausência de dado real (documentados na Especificação Técnica
+§3.8): "Custo por Região" (UF) → "Custo por Macrorregião" (a plataforma não
+agrega por estado); "impacto anual" por oportunidade individual → "impacto no
+período analisado" (só existe anualização agregada da empresa toda, não por
+item).
+
+**Migration**: `b7e2f4a9c1d5` — 2 tabelas novas, `clientes_portal_users`
+(usuário-executivo, empresa_id obrigatório, e-mail globalmente único — audiência
+separada de `users`) e `portal_oportunidade_flags` (estado "priorizada pelo
+cliente", desacoplado de `recomendacoes`, nunca altera o fluxo de trabalho do
+analista). Nenhuma tabela existente alterada.
+
+**Testes**: `test_portal_cookie_auth.py` (6 casos — cookies isolados, rejeição
+cruzada nos dois sentidos) e `test_portal_isolamento.py` (4 casos — dashboard e
+oportunidades nunca vazam entre empresas, "priorizar" de recomendação de outra
+empresa retorna 404). Verificado também via servidor real (não só
+`TestClient`): login → dashboard → oportunidades → priorizar, ponta a ponta.
+
+**Nota de deploy**: esta versão soma ao repositório, mas o deploy de produção
+do `frontend-portal/` (Dockerfile, entrada em `docker-compose.prod.yml`,
+subdomínio/DNS/TLS) ainda não existe — fica para uma próxima etapa, junto da
+decisão de qual subdomínio usar.
+
+**Documentação**: `docs/specs/v6.18.0/` (Validação Estratégica, PRD,
+Especificação Técnica, Protótipo Funcional + 3 wireframes HTML aprovados);
+`00_contexto_oficial.md` §9, `22_plano_diretor_tecnico.md` §16, `04_modelo_de_dados.md`,
+`05_apis.md` e `07_modulos_do_sistema.md` atualizados no mesmo ciclo.
+
 ---
 
 ## Nota sobre nomenclatura de versão

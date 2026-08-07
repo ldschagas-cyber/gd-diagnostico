@@ -249,7 +249,7 @@ export default function AppLayout() {
       <Divider sx={{ borderColor: "rgba(255,255,255,0.08)" }} />
       <Box sx={{ p: 2 }}>
         <Typography sx={{ color: "rgba(255,255,255,0.5)", fontSize: 11 }}>
-          v6.17.0 · GD Diagnóstico Logístico
+          v6.18.0 · GD Diagnóstico Logístico
         </Typography>
       </Box>
     </Box>

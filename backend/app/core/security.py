@@ -53,7 +53,16 @@ def _criar_token(
 
 def _decode_payload(token: str) -> Optional[dict]:
     try:
-        return jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        # verify_aud=False: a validação de audiência é feita manualmente pelas
+        # funções decode_* acima (checam payload["aud"] explicitamente) — sem
+        # isso, jose.jwt.decode rejeita (JWTClaimsError, subclasse de
+        # JWTError) qualquer token que tenha aud=portal_cliente por não
+        # receber um `audience=` esperado, derrubando também os tokens
+        # internos legítimos que nunca tiveram essa claim antes desta versão.
+        return jwt.decode(
+            token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM],
+            options={"verify_aud": False},
+        )
     except JWTError:
         return None
 

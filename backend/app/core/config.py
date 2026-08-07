@@ -17,7 +17,7 @@ class Settings(BaseSettings):
     # Aplicação
     PROJECT_NAME: str = "GD Diagnóstico Logístico"
     API_V1_PREFIX: str = "/api/v1"
-    VERSION: str = "6.17.0"
+    VERSION: str = "6.18.0"
     DEBUG: bool = True
 
     # Banco de dados — SQLite (dev local) ou PostgreSQL (Docker/produção)

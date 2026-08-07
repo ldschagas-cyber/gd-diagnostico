@@ -1,0 +1,50 @@
+/* Design tokens — Portal Executivo GD Conecta (v6.18.0).
+   Fonte de verdade: docs/specs/v6.18.0/v6.18.0_wireframe_portal_executivo_*.html
+   (protótipo aprovado, Revisão do Protótipo em 2026-08-06).
+   Índigo/Âmbar/Azul/Marfim + IBM Plex Sans/Mono — deliberadamente distinto
+   da paleta Sora/Inter do painel do analista (Especificação Técnica §5). */
+:root {
+  --font-display: "IBM Plex Sans", "Segoe UI", "Helvetica Neue", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", "Cascadia Code", "SFMono-Regular", "Consolas", ui-monospace, monospace;
+
+  --indigo: #2D3561; --indigo-600: #3B4478; --amber: #C9A84C; --azul: #0077A8; --marfim: #F5F1EB;
+
+  --paper: var(--marfim); --panel: var(--indigo); --panel-fg: #F1EEE6; --panel-fg-dim: #B7BBD6;
+  --panel-border: rgba(241, 238, 230, 0.12); --panel-active-bg: rgba(201, 168, 76, 0.14);
+
+  --ink: #22243A; --ink-dim: #5B5E78; --ink-faint: #8B8EA6; --border: rgba(45, 53, 97, 0.14);
+  --card-bg: #FFFFFF; --link: var(--azul);
+  --field-bg: #FFFFFF; --focus-ring: rgba(0, 119, 168, 0.35);
+  --danger: #B5342C; --danger-bg: #FBEAE8; --success: #1E7A4C;
+  --shadow: 0 1px 2px rgba(34, 36, 58, 0.05), 0 10px 24px -14px rgba(34, 36, 58, 0.22);
+
+  --good: #0ca30c; --good-bg: rgba(12,163,12,0.10);
+  --warning: #b98600; --warning-bg: rgba(250,178,25,0.16);
+  --critical: #d03b3b; --critical-bg: rgba(208,59,59,0.10);
+
+  --seq-1: #86b6ef; --seq-2: #5598e7; --seq-3: #2a78d6; --seq-4: #1c5cab; --seq-5: #104281;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --paper: #14172A; --panel: #10121F; --panel-fg: #F1EEE6; --panel-fg-dim: #9AA0C0;
+    --panel-border: rgba(241, 238, 230, 0.10); --panel-active-bg: rgba(217, 184, 94, 0.14);
+    --ink: #EDEAE2; --ink-dim: #A6A9C2; --ink-faint: #767A98; --border: rgba(241, 238, 230, 0.12);
+    --card-bg: #1B1E33; --amber: #D9B85E; --azul: #4CB2DE; --link: #4CB2DE;
+    --field-bg: #1B1E33; --focus-ring: rgba(76, 178, 222, 0.4);
+    --danger: #E2766D; --danger-bg: rgba(181, 52, 44, 0.16); --success: #4FBE86;
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 16px 32px -16px rgba(0, 0, 0, 0.55);
+    --good: #4FBE86; --good-bg: rgba(79,190,134,0.14);
+    --warning: #E8B44B; --warning-bg: rgba(232,180,75,0.14);
+    --critical: #E2766D; --critical-bg: rgba(226,118,109,0.14);
+    --seq-1: #9ec5f4; --seq-2: #6da7ec; --seq-3: #3987e5; --seq-4: #256abf; --seq-5: #184f95;
+  }
+}
+
+* { box-sizing: border-box; }
+html, body, #root { height: 100%; }
+body {
+  margin: 0; font-family: var(--font-display); color: var(--ink); background: var(--paper);
+  -webkit-font-smoothing: antialiased; font-variant-numeric: tabular-nums;
+}
+button { font-family: inherit; }
+a { color: inherit; text-decoration: none; }
