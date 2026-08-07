@@ -50,7 +50,14 @@ services:
     env_file:
       - ./backend/.env
     environment:
-      DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      # Usa o container_name (gd_frete_db), não o alias curto 'db' — em
+      # 'gd_conecta_network' (externa, compartilhada com o GD CRM), o alias
+      # 'db' não é único: se o outro projeto também nomear seu serviço 'db',
+      # o DNS embutido do Docker pode resolver para o container ERRADO
+      # (achado real em produção: o backend chegou a conectar no Postgres
+      # do CRM em vez do próprio, causando 'password authentication failed'
+      # intermitente). container_name é único em toda a rede compartilhada.
+      DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@gd_frete_db:5432/${POSTGRES_DB}
       ENVIRONMENT: production
       DEBUG: "false"
     # Porta NÃO exposta diretamente — tráfego via frontend/nginx.
