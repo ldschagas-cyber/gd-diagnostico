@@ -88,6 +88,24 @@ class User:
 
 
 @dataclass
+class ClientePortalUser:
+    """Usuário do Portal do Cliente (v6.18.0) — audiência separada de `User`.
+
+    Pertence a exatamente uma empresa (empresa_id obrigatório) — diferente de
+    `User.empresas_ids` (M:N), o executivo da empresa cliente nunca troca de
+    empresa. Ver Especificação Técnica v6.18.0 §3.1.
+    """
+    id: Optional[int] = None
+    empresa_id: int = 0
+    nome: str = ""
+    email: str = ""
+    hashed_password: str = ""
+    ativo: bool = True
+    ultimo_acesso: Optional[datetime] = None
+    created_at: Optional[datetime] = None
+
+
+@dataclass
 class Empresa:
     id: Optional[int] = None
     razao_social: str = ""

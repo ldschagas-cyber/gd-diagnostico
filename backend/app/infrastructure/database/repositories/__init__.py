@@ -13,6 +13,7 @@ from app.domain.entities import (
     CTE_STATUS_ATIVO,
     CTE_STATUS_CANCELADO,
     Cidade,
+    ClientePortalUser,
     Empresa,
     FechamentoMensal,
     Filial,
@@ -26,6 +27,7 @@ from app.domain.entities import (
 from app.domain.repositories import (
     IBenchmarkRepository,
     ICidadeRepository,
+    IClientePortalUserRepository,
     ICTeRepository,
     IEmpresaRepository,
     IFechamentoMensalRepository,
@@ -42,6 +44,7 @@ from app.infrastructure.database.models import (
     BidModel,
     ChatSessaoModel,
     CidadeModel,
+    ClientePortalUserModel,
     CTeModel,
     CteCancelamentoModel,
     DlgOutlierModel,
@@ -51,6 +54,7 @@ from app.infrastructure.database.models import (
     MetaNacionalModel,
     MetaRegionalModel,
     NFeModel,
+    PortalOportunidadeFlagModel,
     RegiaoModel,
     TransportadoraModel,
     UsageLogModel,
@@ -134,6 +138,71 @@ class UserRepository(IUserRepository):
         self.db.delete(m)
         self.db.commit()
         return True
+
+
+class ClientePortalUserRepository(IClientePortalUserRepository):
+    """Portal do Cliente (v6.18.0) — audiência separada, sem CRUD via API."""
+
+    def __init__(self, db: Session):
+        self.db = db
+
+    def get(self, id: int) -> Optional[ClientePortalUser]:
+        m = self.db.get(ClientePortalUserModel, id)
+        return mp.cliente_portal_user_to_domain(m) if m else None
+
+    def get_by_email(self, email: str) -> Optional[ClientePortalUser]:
+        m = self.db.scalar(select(ClientePortalUserModel).where(ClientePortalUserModel.email == email))
+        return mp.cliente_portal_user_to_domain(m) if m else None
+
+    def atualizar_ultimo_acesso(self, id: int) -> None:
+        m = self.db.get(ClientePortalUserModel, id)
+        if m:
+            m.ultimo_acesso = datetime.utcnow()
+            self.db.commit()
+
+
+class PortalOportunidadeFlagRepository:
+    """Estado "priorizada pelo cliente" de uma recomendação (v6.18.0).
+
+    Trabalha direto com `PortalOportunidadeFlagModel` — tabela pequena e
+    desacoplada do motor analítico, sem entidade de domínio dedicada (mesmo
+    padrão pragmático já usado por `RecomendacaoRepository`, abaixo).
+    """
+
+    def __init__(self, db: Session):
+        self.db = db
+
+    def mapa_priorizadas(
+        self, recomendacao_ids: List[int], cliente_portal_user_id: int
+    ) -> dict[int, bool]:
+        if not recomendacao_ids:
+            return {}
+        rows = self.db.scalars(
+            select(PortalOportunidadeFlagModel).where(
+                PortalOportunidadeFlagModel.recomendacao_id.in_(recomendacao_ids),
+                PortalOportunidadeFlagModel.cliente_portal_user_id == cliente_portal_user_id,
+            )
+        ).all()
+        return {r.recomendacao_id: r.priorizada for r in rows}
+
+    def alternar(self, recomendacao_id: int, empresa_id: int, cliente_portal_user_id: int) -> bool:
+        """Alterna (toggle) o estado "priorizada". Retorna o novo estado."""
+        m = self.db.scalar(
+            select(PortalOportunidadeFlagModel).where(
+                PortalOportunidadeFlagModel.recomendacao_id == recomendacao_id,
+                PortalOportunidadeFlagModel.cliente_portal_user_id == cliente_portal_user_id,
+            )
+        )
+        if m is None:
+            m = PortalOportunidadeFlagModel(
+                recomendacao_id=recomendacao_id, empresa_id=empresa_id,
+                cliente_portal_user_id=cliente_portal_user_id, priorizada=True,
+            )
+            self.db.add(m)
+        else:
+            m.priorizada = not m.priorizada
+        self.db.commit()
+        return m.priorizada
 
 
 class EmpresaRepository(IEmpresaRepository):

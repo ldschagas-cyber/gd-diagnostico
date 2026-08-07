@@ -1,0 +1,305 @@
+<title>Oportunidades Prioritárias — Portal GD Conecta</title>
+<style>
+  :root {
+    --font-display: "IBM Plex Sans", "Segoe UI", "Helvetica Neue", ui-sans-serif, system-ui, sans-serif;
+    --font-mono: "IBM Plex Mono", "Cascadia Code", "SFMono-Regular", "Consolas", ui-monospace, monospace;
+
+    --indigo: #2D3561; --indigo-600: #3B4478; --amber: #C9A84C; --azul: #0077A8; --marfim: #F5F1EB;
+    --paper: var(--marfim); --panel: var(--indigo); --panel-fg: #F1EEE6; --panel-fg-dim: #B7BBD6;
+    --ink: #22243A; --ink-dim: #5B5E78; --ink-faint: #8B8EA6; --border: rgba(45, 53, 97, 0.14);
+    --card-bg: #FFFFFF; --link: var(--azul);
+    --shadow: 0 1px 2px rgba(34, 36, 58, 0.05), 0 10px 24px -14px rgba(34, 36, 58, 0.22);
+    --good: #0ca30c; --good-bg: rgba(12,163,12,0.10);
+    --warning: #b98600; --warning-bg: rgba(250,178,25,0.16);
+    --critical: #d03b3b; --critical-bg: rgba(208,59,59,0.10);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper: #14172A; --panel: #10121F; --panel-fg: #F1EEE6; --panel-fg-dim: #9AA0C0;
+      --ink: #EDEAE2; --ink-dim: #A6A9C2; --ink-faint: #767A98; --border: rgba(241, 238, 230, 0.12);
+      --card-bg: #1B1E33; --amber: #D9B85E; --azul: #4CB2DE; --link: #4CB2DE;
+      --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 16px 32px -16px rgba(0, 0, 0, 0.55);
+      --good: #4FBE86; --good-bg: rgba(79,190,134,0.14);
+      --warning: #E8B44B; --warning-bg: rgba(232,180,75,0.14);
+      --critical: #E2766D; --critical-bg: rgba(226,118,109,0.14);
+    }
+  }
+  :root[data-theme="dark"] {
+    --paper: #14172A; --panel: #10121F; --panel-fg: #F1EEE6; --panel-fg-dim: #9AA0C0;
+    --ink: #EDEAE2; --ink-dim: #A6A9C2; --ink-faint: #767A98; --border: rgba(241, 238, 230, 0.12);
+    --card-bg: #1B1E33; --amber: #D9B85E; --azul: #4CB2DE; --link: #4CB2DE;
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 16px 32px -16px rgba(0, 0, 0, 0.55);
+    --good: #4FBE86; --good-bg: rgba(79,190,134,0.14);
+    --warning: #E8B44B; --warning-bg: rgba(232,180,75,0.14);
+    --critical: #E2766D; --critical-bg: rgba(226,118,109,0.14);
+  }
+  :root[data-theme="light"] {
+    --paper: #F5F1EB; --panel: #2D3561; --panel-fg: #F1EEE6; --panel-fg-dim: #B7BBD6;
+    --ink: #22243A; --ink-dim: #5B5E78; --ink-faint: #8B8EA6; --border: rgba(45, 53, 97, 0.14);
+    --card-bg: #FFFFFF; --amber: #C9A84C; --azul: #0077A8; --link: #0077A8;
+    --shadow: 0 1px 2px rgba(34, 36, 58, 0.05), 0 10px 24px -14px rgba(34, 36, 58, 0.22);
+    --good: #0ca30c; --good-bg: rgba(12,163,12,0.10);
+    --warning: #b98600; --warning-bg: rgba(250,178,25,0.16);
+    --critical: #d03b3b; --critical-bg: rgba(208,59,59,0.10);
+  }
+
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body { margin: 0; font-family: var(--font-display); color: var(--ink); background: var(--paper); -webkit-font-smoothing: antialiased; }
+  button { font-family: inherit; }
+  a { color: inherit; }
+
+  .page { max-width: 900px; margin: 0 auto; padding: 28px 24px 64px; }
+
+  .back-link {
+    display: inline-flex; align-items: center; gap: 6px; text-decoration: none; color: var(--ink-dim);
+    font-size: 13px; font-weight: 600; margin-bottom: 22px; cursor: pointer; border: none; background: none; padding: 0;
+  }
+  .back-link:hover { color: var(--ink); }
+  .back-link svg { width: 14px; height: 14px; }
+
+  .page-head { margin-bottom: 6px; }
+  .page-head h1 { margin: 0 0 6px; font-size: 24px; font-weight: 650; letter-spacing: -0.01em; }
+  .page-head p { margin: 0; color: var(--ink-dim); font-size: 14px; line-height: 1.55; max-width: 62ch; }
+
+  .totals-bar {
+    display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;
+    background: var(--panel); color: var(--panel-fg); border-radius: 14px; padding: 18px 22px; margin: 22px 0 26px;
+  }
+  .totals-bar .t { font-size: 12.5px; color: var(--panel-fg-dim); }
+  .totals-bar .v { font-size: 21px; font-weight: 700; margin-top: 3px; }
+  .totals-bar .stat + .stat { border-left: 1px solid rgba(241,238,230,0.16); padding-left: 22px; }
+  .totals-bar-stats { display: flex; gap: 22px; flex-wrap: wrap; }
+
+  .opp-list { display: flex; flex-direction: column; gap: 12px; }
+  .opp-card {
+    background: var(--card-bg); border: 1px solid var(--border); border-radius: 13px; padding: 18px 20px;
+    box-shadow: var(--shadow); display: flex; align-items: flex-start; gap: 16px; flex-wrap: wrap;
+  }
+  .opp-rank {
+    width: 32px; height: 32px; border-radius: 9px; background: var(--paper); color: var(--ink-dim);
+    display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 13px; flex: none;
+  }
+  .opp-main { flex: 1; min-width: 240px; }
+  .opp-title { font-size: 15px; font-weight: 650; color: var(--ink); margin-bottom: 3px; }
+  .opp-desc { font-size: 13px; color: var(--ink-dim); line-height: 1.5; max-width: 58ch; }
+  .opp-tags { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+
+  .status-pill { display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; font-weight: 600; padding: 4px 10px; border-radius: 100px; white-space: nowrap; }
+  .status-pill.concluido { background: var(--good-bg); color: var(--good); }
+  .status-pill.andamento { background: var(--warning-bg); color: var(--warning); }
+  .status-pill.pendente { background: var(--critical-bg); color: var(--critical); }
+  .prio-pill { display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; font-weight: 600; padding: 4px 10px; border-radius: 100px; background: var(--paper); color: var(--ink-dim); }
+  .prio-pill .dot { width: 6px; height: 6px; border-radius: 50%; }
+  .prio-pill.alta .dot { background: var(--critical); }
+  .prio-pill.media .dot { background: var(--warning); }
+  .prio-pill.baixa .dot { background: var(--ink-faint); }
+
+  .opp-side { display: flex; flex-direction: column; align-items: flex-end; gap: 10px; margin-left: auto; }
+  .opp-value { font-size: 18px; font-weight: 700; color: var(--ink); white-space: nowrap; }
+  .opp-value span { display: block; font-size: 10.5px; font-weight: 500; color: var(--ink-faint); text-align: right; }
+
+  .opp-actions { display: flex; gap: 8px; }
+  .btn-ghost {
+    font-size: 12.5px; font-weight: 600; padding: 7px 12px; border-radius: 8px; cursor: pointer;
+    background: var(--card-bg); border: 1px solid var(--border); color: var(--ink-dim);
+  }
+  .btn-ghost:hover { color: var(--ink); }
+  .btn-prioritize {
+    font-size: 12.5px; font-weight: 600; padding: 7px 12px; border-radius: 8px; cursor: pointer;
+    background: var(--indigo); color: var(--panel-fg); border: 1px solid var(--indigo);
+    display: inline-flex; align-items: center; gap: 6px;
+  }
+  .btn-prioritize:hover { background: var(--indigo-600); }
+  .btn-prioritize.is-active { background: var(--amber); color: var(--indigo); border-color: var(--amber); }
+  .btn-prioritize svg { width: 13px; height: 13px; }
+
+  .toast {
+    position: fixed; left: 50%; bottom: 26px; transform: translate(-50%, 12px);
+    background: var(--ink); color: var(--paper); font-size: 13.5px; padding: 10px 16px; border-radius: 8px;
+    box-shadow: var(--shadow); opacity: 0; pointer-events: none;
+    transition: opacity 180ms ease, transform 180ms ease; z-index: 30; max-width: 88vw;
+  }
+  .toast.show { opacity: 1; transform: translate(-50%, 0); pointer-events: auto; }
+
+  @media (max-width: 640px) {
+    .opp-card { flex-direction: column; }
+    .opp-side { align-items: flex-start; margin-left: 0; width: 100%; }
+  }
+</style>
+
+<div class="page">
+  <button class="back-link" id="backBtn">
+    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 4L6 10l6 6"/></svg>
+    Voltar ao Dashboard Executivo
+  </button>
+
+  <div class="page-head">
+    <h1>Oportunidades Prioritárias</h1>
+    <p>As 5 iniciativas com maior impacto financeiro identificadas no seu diagnóstico, ordenadas por
+       potencial de economia anual. Priorize as que quer acompanhar de perto — isso não altera o
+       trabalho da equipe GD Conecta, só destaca o que importa para você.</p>
+  </div>
+
+  <div class="totals-bar">
+    <div class="totals-bar-stats">
+      <div class="stat"><div class="t">Potencial total identificado</div><div class="v">R$ 842.000/ano</div></div>
+      <div class="stat"><div class="t">Ações concluídas</div><div class="v">7 de 10</div></div>
+    </div>
+    <div class="stat"><div class="t">Priorizadas por você</div><div class="v" id="prioritizedCount">0 de 5</div></div>
+  </div>
+
+  <div class="opp-list" id="oppList">
+    <div class="opp-card" data-value="310000">
+      <div class="opp-rank">1</div>
+      <div class="opp-main">
+        <div class="opp-title">Renegociar Transportadora X</div>
+        <div class="opp-desc">Contrato atual 22% acima da referência de mercado para a mesma malha de rotas. Janela de renegociação abre em 30 dias.</div>
+        <div class="opp-tags">
+          <span class="prio-pill alta"><span class="dot"></span>Prioridade alta</span>
+          <span class="status-pill pendente">Pendente</span>
+        </div>
+      </div>
+      <div class="opp-side">
+        <div class="opp-value">R$ 310.000<span>impacto/ano</span></div>
+        <div class="opp-actions">
+          <button class="btn-ghost" data-detail="Renegociar Transportadora X">Ver detalhes</button>
+          <button class="btn-prioritize" data-prioritize>
+            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 3l2.1 4.3 4.7.7-3.4 3.3.8 4.7L10 14l-4.2 2 .8-4.7L3.2 8l4.7-.7L10 3z"/></svg>
+            Priorizar
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="opp-card" data-value="198000">
+      <div class="opp-rank">2</div>
+      <div class="opp-main">
+        <div class="opp-title">Revisar tabela de frete — São Paulo</div>
+        <div class="opp-desc">Tabela vigente não reflete o volume atual de embarques na região; reajuste de faixas pode reduzir custo por tonelada.</div>
+        <div class="opp-tags">
+          <span class="prio-pill alta"><span class="dot"></span>Prioridade alta</span>
+          <span class="status-pill andamento">Em andamento</span>
+        </div>
+      </div>
+      <div class="opp-side">
+        <div class="opp-value">R$ 198.000<span>impacto/ano</span></div>
+        <div class="opp-actions">
+          <button class="btn-ghost" data-detail="Revisar tabela de frete — São Paulo">Ver detalhes</button>
+          <button class="btn-prioritize" data-prioritize>
+            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 3l2.1 4.3 4.7.7-3.4 3.3.8 4.7L10 14l-4.2 2 .8-4.7L3.2 8l4.7-.7L10 3z"/></svg>
+            Priorizar
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="opp-card" data-value="134000">
+      <div class="opp-rank">3</div>
+      <div class="opp-main">
+        <div class="opp-title">Consolidar cargas — HUB Campinas</div>
+        <div class="opp-desc">Fragmentação de embarques encarece o último trecho. Consolidar 3 rotas no HUB reduz viagens parciais.</div>
+        <div class="opp-tags">
+          <span class="prio-pill media"><span class="dot"></span>Prioridade média</span>
+          <span class="status-pill pendente">Pendente</span>
+        </div>
+      </div>
+      <div class="opp-side">
+        <div class="opp-value">R$ 134.000<span>impacto/ano</span></div>
+        <div class="opp-actions">
+          <button class="btn-ghost" data-detail="Consolidar cargas — HUB Campinas">Ver detalhes</button>
+          <button class="btn-prioritize" data-prioritize>
+            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 3l2.1 4.3 4.7.7-3.4 3.3.8 4.7L10 14l-4.2 2 .8-4.7L3.2 8l4.7-.7L10 3z"/></svg>
+            Priorizar
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="opp-card" data-value="96000">
+      <div class="opp-rank">4</div>
+      <div class="opp-main">
+        <div class="opp-title">Revisar SLA de última milha — Sul</div>
+        <div class="opp-desc">Índice de re-entrega 3x acima da média das demais regiões, gerando custo adicional de logística reversa.</div>
+        <div class="opp-tags">
+          <span class="prio-pill media"><span class="dot"></span>Prioridade média</span>
+          <span class="status-pill pendente">Pendente</span>
+        </div>
+      </div>
+      <div class="opp-side">
+        <div class="opp-value">R$ 96.000<span>impacto/ano</span></div>
+        <div class="opp-actions">
+          <button class="btn-ghost" data-detail="Revisar SLA de última milha — Sul">Ver detalhes</button>
+          <button class="btn-prioritize" data-prioritize>
+            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 3l2.1 4.3 4.7.7-3.4 3.3.8 4.7L10 14l-4.2 2 .8-4.7L3.2 8l4.7-.7L10 3z"/></svg>
+            Priorizar
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="opp-card" data-value="84000">
+      <div class="opp-rank">5</div>
+      <div class="opp-main">
+        <div class="opp-title">Ajustar rota BA–PE</div>
+        <div class="opp-desc">Rota opera com ociosidade média de 18% no retorno. Reequilíbrio de carga de volta reduz custo por viagem.</div>
+        <div class="opp-tags">
+          <span class="prio-pill baixa"><span class="dot"></span>Prioridade baixa</span>
+          <span class="status-pill pendente">Pendente</span>
+        </div>
+      </div>
+      <div class="opp-side">
+        <div class="opp-value">R$ 84.000<span>impacto/ano</span></div>
+        <div class="opp-actions">
+          <button class="btn-ghost" data-detail="Ajustar rota BA–PE">Ver detalhes</button>
+          <button class="btn-prioritize" data-prioritize>
+            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 3l2.1 4.3 4.7.7-3.4 3.3.8 4.7L10 14l-4.2 2 .8-4.7L3.2 8l4.7-.7L10 3z"/></svg>
+            Priorizar
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+  (function () {
+    var toastEl = document.getElementById('toast');
+    var toastTimer;
+    function showToast(msg) {
+      toastEl.textContent = msg;
+      toastEl.classList.add('show');
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(function () { toastEl.classList.remove('show'); }, 3000);
+    }
+
+    document.getElementById('backBtn').addEventListener('click', function () {
+      window.location.href = 'v6.18.0_wireframe_portal_executivo_dashboard.html';
+    });
+
+    document.querySelectorAll('[data-detail]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        showToast('Detalhe de "' + btn.getAttribute('data-detail') + '" ainda não foi prototipado.');
+      });
+    });
+
+    var countEl = document.getElementById('prioritizedCount');
+    var total = document.querySelectorAll('[data-prioritize]').length;
+    function updateCount() {
+      var n = document.querySelectorAll('.btn-prioritize.is-active').length;
+      countEl.textContent = n + ' de ' + total;
+    }
+
+    document.querySelectorAll('[data-prioritize]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var active = btn.classList.toggle('is-active');
+        btn.lastChild.textContent = active ? ' Priorizada' : ' Priorizar';
+        var title = btn.closest('.opp-card').querySelector('.opp-title').textContent;
+        showToast(active ? '"' + title + '" priorizada — a equipe GD Conecta será avisada.' : '"' + title + '" removida das priorizadas.');
+        updateCount();
+      });
+    });
+  })();
+</script>

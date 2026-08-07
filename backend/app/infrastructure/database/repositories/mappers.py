@@ -3,6 +3,7 @@ from app.domain.entities import (
     CTe,
     Benchmark,
     Cidade,
+    ClientePortalUser,
     Empresa,
     FechamentoMensal,
     Filial,
@@ -20,6 +21,7 @@ from app.domain.entities import (
 from app.infrastructure.database.models import (
     BenchmarkModel,
     CidadeModel,
+    ClientePortalUserModel,
     CTeModel,
     EmpresaModel,
     FechamentoMensalModel,
@@ -42,6 +44,14 @@ def user_to_domain(m: UserModel) -> User:
         empresa_id=m.empresa_id,
         empresas_ids=[e.id for e in (m.empresas or [])],
         created_at=m.created_at,
+    )
+
+
+def cliente_portal_user_to_domain(m: ClientePortalUserModel) -> ClientePortalUser:
+    return ClientePortalUser(
+        id=m.id, empresa_id=m.empresa_id, nome=m.nome, email=m.email,
+        hashed_password=m.hashed_password, ativo=m.ativo,
+        ultimo_acesso=m.ultimo_acesso, created_at=m.created_at,
     )
 
 

@@ -125,3 +125,16 @@
 | **Telas** | `Relatorios.jsx`, `BidRelatorios.jsx`, telas de download embutidas em `DiagnosticoIA.jsx` |
 | **Endpoints** | `relatorios.py` (5), `inteligencia.py` (`/inteligencia/relatorio/{formato}`) |
 | **Formatos** | Excel (`openpyxl`), PDF (`reportlab`), Word (`python-docx`), PowerPoint (`python-pptx`) |
+
+## Portal do Cliente (v6.18.0)
+
+> Primeiro recorte do Portal do Cliente — usuário primário é o executivo da empresa cliente, não o analista (única exceção à regra geral da plataforma, ver `00_contexto_oficial.md` §9 e `docs/specs/v6.18.0/v6.18.0_validacao_estrategica.md`). App separado (`frontend-portal/`), autenticação própria, somente-leitura + uma ação de sinalização de baixo risco. Reutiliza 100% o motor analítico já usado pelo analista — nenhum cálculo novo.
+
+| | |
+|---|---|
+| **App** | `frontend-portal/` (React + Vite, projeto próprio, não é uma rota de `frontend/`) |
+| **Telas** | `LoginPage.jsx`, `DashboardExecutivoPage.jsx`, `OportunidadesPage.jsx` — os demais itens de menu (Diagnóstico/Benchmark/Inteligência/Governança/Relatórios/Minha Conta) mostram aviso "ainda não disponível", sem tela própria nesta versão |
+| **Endpoints** | `portal_cliente.py` (7) |
+| **Entidades** | `ClientePortalUser`, `PortalOportunidadeFlag` — nenhuma tabela do motor analítico alterada |
+| **Reuso** | `ScoreLogisticoUseCase` (Performance Logística), `BenchmarkUseCase` (Benchmark/Custo por Macrorregião/Potencial de Economia/Evolução), `RecomendacoesUseCase` (Plano de Ação/Oportunidades) |
+| **Observação** | Dois ajustes de escopo em relação ao protótipo original, por ausência de dado real: "Custo por Região" virou "Custo por Macrorregião" (não existe agregação por UF no motor) e "impacto anual" por oportunidade virou "impacto no período analisado" (não existe anualização por item, só agregada). Ver Especificação Técnica §3.8. |

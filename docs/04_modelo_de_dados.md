@@ -92,7 +92,16 @@
 | `documentos_vetoriais` | empresa_id, tipo_documento (indexado), titulo, conteudo, data_referencia, doc_metadata (coluna real `metadata`, JSON), embedding (JSON), indexado | → `empresas.id` |
 | `embedding_jobs` | empresa_id, documento_id, status, erro | → `empresas.id`, `documentos_vetoriais.id` |
 
-**Total: 44 tabelas** em 53 modelos SQLAlchemy declarados (alguns modelos compartilham tabela via `extend_existing`).
+## 9. Portal do Cliente (v6.18.0)
+
+> Audiência separada de `users` — ver `05_apis.md` §20 e Especificação Técnica `docs/specs/v6.18.0/`. Nenhuma tabela do motor analítico foi alterada para esta funcionalidade.
+
+| Tabela | Campos principais | Relacionamentos |
+|---|---|---|
+| `clientes_portal_users` | empresa_id (obrigatório, diferente de `users.empresa_id` que é nullable), nome, email (único globalmente), hashed_password, ativo, ultimo_acesso | → `empresas.id` |
+| `portal_oportunidade_flags` | recomendacao_id, empresa_id, cliente_portal_user_id, priorizada, atualizado_em — único por (recomendacao_id, cliente_portal_user_id) | → `recomendacoes.id`, `empresas.id`, `clientes_portal_users.id` |
+
+**Total: 46 tabelas** em 55 modelos SQLAlchemy declarados (alguns modelos compartilham tabela via `extend_existing`).
 
 ## Migrations
 

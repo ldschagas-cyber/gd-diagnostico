@@ -266,6 +266,20 @@
 | GET | `/relatorios/benchmark/{empresa_id}/pdf` | Relatório de benchmark (PDF) | `verificar_acesso_empresa` |
 | GET | `/relatorios/bid/{bid_id}/{tipo}/{formato}` | Relatórios de BID (executivo/comparativo/ranking/economia/resultado/pacote_cotacao; pdf/excel) | `verificar_acesso_empresa` |
 
+## 20. `portal_cliente.py` — `/portal` (7 endpoints) — v6.18.0
+
+> Audiência separada (Portal do Cliente) — cookies `gd_frete_cliente_*`, claim `aud=portal_cliente`, nunca aceitos por `get_current_user` (interno) nem vice-versa. Nenhuma rota recebe `empresa_id` de path/query — sempre derivado de `current_user.empresa_id` (dependency `get_current_cliente_user`). Todo dado de leitura reaproveita `ScoreLogisticoUseCase`, `BenchmarkUseCase` e `RecomendacoesUseCase`, sem cálculo paralelo. Ver Especificação Técnica `docs/specs/v6.18.0/v6.18.0_especificacao_tecnica_portal_executivo.md`.
+
+| Método | Path | Descrição | Auth |
+|---|---|---|---|
+| POST | `/portal/auth/login` | Login do usuário-cliente (OAuth2 password flow) | rate-limited 10/min |
+| POST | `/portal/auth/refresh` | Renova access token (cookie ou body) | `gd_frete_cliente_refresh` |
+| POST | `/portal/auth/logout` | Limpa cookies do Portal | — |
+| GET | `/portal/auth/me` | Dados do usuário-cliente + empresa | `get_current_cliente_user` |
+| GET | `/portal/dashboard` | Resumo executivo, 5 KPIs, evolução, benchmark, custo por macrorregião, potencial de economia, plano de ação | `get_current_cliente_user` |
+| GET | `/portal/oportunidades` | Lista de recomendações ordenada por impacto | `get_current_cliente_user` |
+| PATCH | `/portal/oportunidades/{recomendacao_id}/priorizar` | Alterna "priorizada pelo cliente" (`portal_oportunidade_flags`, não altera `recomendacoes`) | `get_current_cliente_user` |
+
 ## Contagem total
 
 | Router | Endpoints |
@@ -289,4 +303,5 @@
 | importacao | 8 |
 | dashboard | 1 |
 | relatorios | 5 |
-| **Total** | **148** |
+| portal_cliente (v6.18.0) | 7 |
+| **Total** | **155** |
